@@ -90,6 +90,8 @@ jobs:
           metadata:
             name: gitops-example-${SAFE_BRANCH}
             namespace: argocd
+            finalizers:
+              - resources-finalizer.argocd.argoproj.io
           spec:
             project: default
             source:
