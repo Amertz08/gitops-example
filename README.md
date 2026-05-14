@@ -7,7 +7,7 @@ A GitOps-driven application demonstrating automated Kubernetes deployments via A
 ### API (`cmd/api/main.go`)
 A small HTTP API built with [Echo v5](https://github.com/labstack/echo), listening on `:1323`.
 
-### Temporal Worker (`cmd/worker/`)
+### Temporal Worker (`cmd/worker/main.go`)
 A [Temporal](https://temporal.io) worker that executes infrastructure provisioning workflows against AWS. It registers on the `infrastructure` task queue.
 
 ## Temporal Workflows
@@ -17,11 +17,13 @@ Workflows are composed as parent/child chains, each owning a distinct layer of i
 | Workflow | Direction | Responsibility |
 |---|---|---|
 | `SpinUpWorkflow` | up | Orchestrates full environment creation |
+| `SpinUpIAMWorkflow` | up | Creates EKS cluster and node IAM roles |
 | `SpinUpNetworkWorkflow` | up | Creates VPC, subnets, internet gateway, route tables |
 | `SpinUpEKSWorkflow` | up | Creates EKS cluster and node group |
 | `SpinDownWorkflow` | down | Orchestrates full environment teardown |
 | `SpinDownEKSWorkflow` | down | Deletes node group and EKS cluster |
 | `SpinDownNetworkWorkflow` | down | Deletes subnets, internet gateway, and VPC |
+| `SpinDownIAMWorkflow` | down | Deletes EKS cluster and node IAM roles |
 
 ## Configuration
 
@@ -36,8 +38,14 @@ Workflows are composed as parent/child chains, each owning a distinct layer of i
 # Run the API locally
 go run ./cmd/api/main.go
 
+# Run the worker locally
+go run ./cmd/worker/main.go
+
 # Build the API binary
 go build -o api ./cmd/api/
+
+# Build the worker binary
+go build -o worker ./cmd/worker/
 
 # Run tests
 go test -v ./...
