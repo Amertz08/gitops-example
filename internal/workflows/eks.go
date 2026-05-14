@@ -34,20 +34,15 @@ func SpinUpEKSWorkflow(ctx workflow.Context, input SpinUpEKSInput) error {
 		Get(ctx, nil)
 }
 
-func SpinDownEKSWorkflow(ctx workflow.Context, input SpinDownEKSInput) (string, error) {
+func SpinDownEKSWorkflow(ctx workflow.Context, input SpinDownEKSInput) error {
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	aws := &activities.AWSActivities{}
 
 	if err := workflow.ExecuteActivity(ctx, aws.DeleteNodeGroup, input.Region, input.ClusterName).
 		Get(ctx, nil); err != nil {
-		return "", err
+		return err
 	}
 
-	var vpcID string
-	if err := workflow.ExecuteActivity(ctx, aws.DeleteEKSCluster, input.Region, input.ClusterName).
-		Get(ctx, &vpcID); err != nil {
-		return "", err
-	}
-
-	return vpcID, nil
+	return workflow.ExecuteActivity(ctx, aws.DeleteEKSCluster, input.Region, input.ClusterName).
+		Get(ctx, nil)
 }

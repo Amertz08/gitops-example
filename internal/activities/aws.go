@@ -261,39 +261,23 @@ func (a *AWSActivities) DeleteNodeGroup(ctx context.Context, region, clusterName
 	}, 30*time.Minute)
 }
 
-func (a *AWSActivities) DeleteEKSCluster(
-	ctx context.Context,
-	region, clusterName string,
-) (string, error) {
-	eksClient, err := newEKSClient(ctx, a, region)
+func (a *AWSActivities) DeleteEKSCluster(ctx context.Context, region, clusterName string) error {
+	client, err := newEKSClient(ctx, a, region)
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	describe, err := eksClient.DescribeCluster(
-		ctx,
-		&eks.DescribeClusterInput{Name: aws.String(clusterName)},
-	)
+	_, err = client.DeleteCluster(ctx, &eks.DeleteClusterInput{Name: aws.String(clusterName)})
 	if err != nil {
-		return "", fmt.Errorf("describe cluster: %w", err)
-	}
-	vpcID := *describe.Cluster.ResourcesVpcConfig.VpcId
-
-	_, err = eksClient.DeleteCluster(ctx, &eks.DeleteClusterInput{Name: aws.String(clusterName)})
-	if err != nil {
-		return "", fmt.Errorf("delete EKS cluster: %w", err)
+		return fmt.Errorf("delete EKS cluster: %w", err)
 	}
 
-	waiter := eks.NewClusterDeletedWaiter(eksClient)
-	if err := waiter.Wait(
+	waiter := eks.NewClusterDeletedWaiter(client)
+	return waiter.Wait(
 		ctx,
 		&eks.DescribeClusterInput{Name: aws.String(clusterName)},
 		30*time.Minute,
-	); err != nil {
-		return "", err
-	}
-
-	return vpcID, nil
+	)
 }
 
 func (a *AWSActivities) DeleteSubnets(ctx context.Context, region, vpcID string) error {
