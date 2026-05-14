@@ -504,6 +504,21 @@ func (a *AWSActivities) CreateIAMRole(
 		}
 	}
 
+	for _, p := range input.InlinePolicies {
+		if _, err = client.PutRolePolicy(ctx, &iam.PutRolePolicyInput{
+			RoleName:       aws.String(input.RoleName),
+			PolicyName:     aws.String(p.Name),
+			PolicyDocument: aws.String(p.Document),
+		}); err != nil {
+			return "", fmt.Errorf(
+				"put inline policy %s on role %s: %w",
+				p.Name,
+				input.RoleName,
+				err,
+			)
+		}
+	}
+
 	return *out.Role.Arn, nil
 }
 
@@ -511,6 +526,22 @@ func (a *AWSActivities) DeleteIAMRole(ctx context.Context, input DeleteIAMRoleIn
 	client, err := newIAMClient(ctx, a)
 	if err != nil {
 		return err
+	}
+
+	inlinePolicies, err := client.ListRolePolicies(
+		ctx,
+		&iam.ListRolePoliciesInput{RoleName: aws.String(input.RoleName)},
+	)
+	if err != nil {
+		return fmt.Errorf("list inline policies for role %s: %w", input.RoleName, err)
+	}
+	for _, name := range inlinePolicies.PolicyNames {
+		if _, err = client.DeleteRolePolicy(ctx, &iam.DeleteRolePolicyInput{
+			RoleName:   aws.String(input.RoleName),
+			PolicyName: aws.String(name),
+		}); err != nil {
+			return fmt.Errorf("delete inline policy %s from role %s: %w", name, input.RoleName, err)
+		}
 	}
 
 	policies, err := client.ListAttachedRolePolicies(
