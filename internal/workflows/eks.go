@@ -1,7 +1,10 @@
 package workflows
 
 import (
+	"fmt"
+
 	"github.com/Amertz08/gitops-example/internal/activities"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -21,7 +24,43 @@ type SpinDownEKSInput struct {
 	ClusterName string
 }
 
+func (i SpinUpEKSInput) validate() error {
+	switch {
+	case i.Region == "":
+		return fmt.Errorf("Region is required")
+	case i.ClusterName == "":
+		return fmt.Errorf("ClusterName is required")
+	case i.VpcID == "":
+		return fmt.Errorf("VpcID is required")
+	case len(i.SubnetIDs) == 0:
+		return fmt.Errorf("SubnetIDs is required")
+	case i.NodeInstanceType == "":
+		return fmt.Errorf("NodeInstanceType is required")
+	case i.Environment == "":
+		return fmt.Errorf("Environment is required")
+	case i.Team == "":
+		return fmt.Errorf("Team is required")
+	case i.NodeCount <= 0:
+		return fmt.Errorf("NodeCount must be greater than 0")
+	}
+	return nil
+}
+
+func (i SpinDownEKSInput) validate() error {
+	switch {
+	case i.Region == "":
+		return fmt.Errorf("Region is required")
+	case i.ClusterName == "":
+		return fmt.Errorf("ClusterName is required")
+	}
+	return nil
+}
+
 func SpinUpEKSWorkflow(ctx workflow.Context, input SpinUpEKSInput) (err error) {
+	if valErr := input.validate(); valErr != nil {
+		return temporal.NewNonRetryableApplicationError(valErr.Error(), "InvalidInput", valErr)
+	}
+
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	aws := &activities.AWSActivities{}
 	logger := workflow.GetLogger(ctx)
@@ -82,6 +121,10 @@ func SpinUpEKSWorkflow(ctx workflow.Context, input SpinUpEKSInput) (err error) {
 }
 
 func SpinDownEKSWorkflow(ctx workflow.Context, input SpinDownEKSInput) error {
+	if err := input.validate(); err != nil {
+		return temporal.NewNonRetryableApplicationError(err.Error(), "InvalidInput", err)
+	}
+
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	aws := &activities.AWSActivities{}
 	logger := workflow.GetLogger(ctx)
