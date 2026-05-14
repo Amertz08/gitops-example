@@ -40,6 +40,7 @@ type ConfigureRouteTablesInput struct {
 type CreateEKSClusterInput struct {
 	Region      string
 	ClusterName string
+	RoleARN     string
 	VpcID       string
 	SubnetIDs   []string
 	Environment string
@@ -49,6 +50,7 @@ type CreateEKSClusterInput struct {
 type CreateNodeGroupInput struct {
 	Region       string
 	ClusterName  string
+	NodeRoleARN  string
 	SubnetIDs    []string
 	NodeCount    int32
 	InstanceType string

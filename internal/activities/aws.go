@@ -263,7 +263,7 @@ func (a *AWSActivities) CreateEKSCluster(ctx context.Context, input CreateEKSClu
 		ResourcesVpcConfig: &ekstypes.VpcConfigRequest{
 			SubnetIds: input.SubnetIDs,
 		},
-		RoleArn: aws.String(fmt.Sprintf("arn:aws:iam::*:role/%s-eks-role", input.ClusterName)),
+		RoleArn: aws.String(input.RoleARN),
 		Tags:    eksTags(input.Environment, input.Team),
 	})
 	if err != nil {
@@ -296,10 +296,8 @@ func (a *AWSActivities) CreateNodeGroup(ctx context.Context, input CreateNodeGro
 			MaxSize:     aws.Int32(input.NodeCount * 2),
 		},
 		InstanceTypes: []string{input.InstanceType},
-		NodeRole: aws.String(
-			fmt.Sprintf("arn:aws:iam::*:role/%s-node-role", input.ClusterName),
-		),
-		Tags: eksTags(input.Environment, input.Team),
+		NodeRole:      aws.String(input.NodeRoleARN),
+		Tags:          eksTags(input.Environment, input.Team),
 	})
 	if err != nil {
 		return fmt.Errorf("create node group: %w", err)

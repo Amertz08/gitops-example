@@ -11,6 +11,8 @@ import (
 type SpinUpEKSInput struct {
 	Region           string
 	ClusterName      string
+	ClusterRoleARN   string
+	NodeRoleARN      string
 	VpcID            string
 	SubnetIDs        []string
 	NodeCount        int32
@@ -30,6 +32,10 @@ func (i SpinUpEKSInput) validate() error {
 		return fmt.Errorf("Region is required")
 	case i.ClusterName == "":
 		return fmt.Errorf("ClusterName is required")
+	case i.ClusterRoleARN == "":
+		return fmt.Errorf("ClusterRoleARN is required")
+	case i.NodeRoleARN == "":
+		return fmt.Errorf("NodeRoleARN is required")
 	case i.VpcID == "":
 		return fmt.Errorf("VpcID is required")
 	case len(i.SubnetIDs) == 0:
@@ -75,6 +81,7 @@ func SpinUpEKSWorkflow(ctx workflow.Context, input SpinUpEKSInput) (err error) {
 	if err = workflow.ExecuteActivity(ctx, aws.CreateEKSCluster, activities.CreateEKSClusterInput{
 		Region:      input.Region,
 		ClusterName: input.ClusterName,
+		RoleARN:     input.ClusterRoleARN,
 		VpcID:       input.VpcID,
 		SubnetIDs:   input.SubnetIDs,
 		Environment: input.Environment,
@@ -102,6 +109,7 @@ func SpinUpEKSWorkflow(ctx workflow.Context, input SpinUpEKSInput) (err error) {
 	if err = workflow.ExecuteActivity(ctx, aws.CreateNodeGroup, activities.CreateNodeGroupInput{
 		Region:       input.Region,
 		ClusterName:  input.ClusterName,
+		NodeRoleARN:  input.NodeRoleARN,
 		SubnetIDs:    input.SubnetIDs,
 		NodeCount:    input.NodeCount,
 		InstanceType: input.NodeInstanceType,
