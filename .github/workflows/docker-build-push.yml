@@ -3,6 +3,9 @@ name: Build and Push Docker Image
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -10,10 +13,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Log in to container registry
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: amertz08/gitops-example
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
@@ -22,7 +27,9 @@ jobs:
         with:
           context: .
           push: true
-          tags: amertz08/${{ github.repository }}:${{ github.sha }},amertz08/${{ github.repository }}:latest
+          tags: ${{ github.repository }}:${{ github.sha }},${{ github.repository }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           labels: |
             org.opencontainers.image.title=${{ github.repository }}
             org.opencontainers.image.description=GitOps Example API
@@ -33,4 +40,4 @@ jobs:
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.created=${{ github.event.created_at }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ github.ref }}
+            org.opencontainers.image.version=${{ github.ref_name }}
