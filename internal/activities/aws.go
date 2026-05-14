@@ -301,7 +301,17 @@ func (a *AWSActivities) CreateNodeGroup(ctx context.Context, input CreateNodeGro
 		),
 		Tags: eksTags(input.Environment, input.Team),
 	})
-	return err
+	if err != nil {
+		return fmt.Errorf("create node group: %w", err)
+	}
+
+	waiter := eks.NewNodegroupActiveWaiter(client)
+	return heartbeatWhileWaiting(ctx, func() error {
+		return waiter.Wait(ctx, &eks.DescribeNodegroupInput{
+			ClusterName:   aws.String(input.ClusterName),
+			NodegroupName: aws.String(input.ClusterName + "-nodes"),
+		}, 30*time.Minute)
+	})
 }
 
 func (a *AWSActivities) DeleteNodeGroup(ctx context.Context, input DeleteNodeGroupInput) error {
