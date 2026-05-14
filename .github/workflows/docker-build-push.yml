@@ -90,6 +90,8 @@ jobs:
           metadata:
             name: gitops-example-${SAFE_BRANCH}
             namespace: argocd
+            finalizers:
+              - resources-finalizer.argocd.argoproj.io
           spec:
             project: default
             source:
@@ -140,5 +142,6 @@ jobs:
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git rm deploy/argocd/branches/${SAFE_BRANCH}.yaml
             git commit -m "chore: remove ArgoCD app for deleted branch ${BRANCH}"
+            git pull --rebase origin main
             git push origin main
           fi
