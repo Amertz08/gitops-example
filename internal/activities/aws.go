@@ -36,7 +36,10 @@ func (a *AWSActivities) loadConfig(ctx context.Context, region string) (aws.Conf
 	return cfg, nil
 }
 
-func ec2TagSpec(resourceType ec2types.ResourceType, environment, team string) []ec2types.TagSpecification {
+func ec2TagSpec(
+	resourceType ec2types.ResourceType,
+	environment, team string,
+) []ec2types.TagSpecification {
 	return []ec2types.TagSpecification{{
 		ResourceType: resourceType,
 		Tags: []ec2types.Tag{
@@ -88,7 +91,10 @@ func (a *AWSActivities) CreateVPC(ctx context.Context, input CreateVPCInput) (st
 	return *out.Vpc.VpcId, nil
 }
 
-func (a *AWSActivities) CreateSubnets(ctx context.Context, input CreateSubnetsInput) ([]string, error) {
+func (a *AWSActivities) CreateSubnets(
+	ctx context.Context,
+	input CreateSubnetsInput,
+) ([]string, error) {
 	client, err := newEC2Client(ctx, a, input.Region)
 	if err != nil {
 		return nil, err
@@ -98,9 +104,13 @@ func (a *AWSActivities) CreateSubnets(ctx context.Context, input CreateSubnetsIn
 	var subnetIDs []string
 	for _, cidr := range cidrs {
 		out, err := client.CreateSubnet(ctx, &ec2.CreateSubnetInput{
-			VpcId:             aws.String(input.VpcID),
-			CidrBlock:         aws.String(cidr),
-			TagSpecifications: ec2TagSpec(ec2types.ResourceTypeSubnet, input.Environment, input.Team),
+			VpcId:     aws.String(input.VpcID),
+			CidrBlock: aws.String(cidr),
+			TagSpecifications: ec2TagSpec(
+				ec2types.ResourceTypeSubnet,
+				input.Environment,
+				input.Team,
+			),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("create subnet %s: %w", cidr, err)
@@ -111,14 +121,21 @@ func (a *AWSActivities) CreateSubnets(ctx context.Context, input CreateSubnetsIn
 	return subnetIDs, nil
 }
 
-func (a *AWSActivities) CreateInternetGateway(ctx context.Context, input CreateInternetGatewayInput) (string, error) {
+func (a *AWSActivities) CreateInternetGateway(
+	ctx context.Context,
+	input CreateInternetGatewayInput,
+) (string, error) {
 	client, err := newEC2Client(ctx, a, input.Region)
 	if err != nil {
 		return "", err
 	}
 
 	igwOut, err := client.CreateInternetGateway(ctx, &ec2.CreateInternetGatewayInput{
-		TagSpecifications: ec2TagSpec(ec2types.ResourceTypeInternetGateway, input.Environment, input.Team),
+		TagSpecifications: ec2TagSpec(
+			ec2types.ResourceTypeInternetGateway,
+			input.Environment,
+			input.Team,
+		),
 	})
 	if err != nil {
 		return "", fmt.Errorf("create IGW: %w", err)
@@ -135,15 +152,22 @@ func (a *AWSActivities) CreateInternetGateway(ctx context.Context, input CreateI
 	return *igwID, nil
 }
 
-func (a *AWSActivities) ConfigureRouteTables(ctx context.Context, input ConfigureRouteTablesInput) error {
+func (a *AWSActivities) ConfigureRouteTables(
+	ctx context.Context,
+	input ConfigureRouteTablesInput,
+) error {
 	client, err := newEC2Client(ctx, a, input.Region)
 	if err != nil {
 		return err
 	}
 
 	rtOut, err := client.CreateRouteTable(ctx, &ec2.CreateRouteTableInput{
-		VpcId:             aws.String(input.VpcID),
-		TagSpecifications: ec2TagSpec(ec2types.ResourceTypeRouteTable, input.Environment, input.Team),
+		VpcId: aws.String(input.VpcID),
+		TagSpecifications: ec2TagSpec(
+			ec2types.ResourceTypeRouteTable,
+			input.Environment,
+			input.Team,
+		),
 	})
 	if err != nil {
 		return fmt.Errorf("create route table: %w", err)
@@ -213,8 +237,10 @@ func (a *AWSActivities) CreateNodeGroup(ctx context.Context, input CreateNodeGro
 			MaxSize:     aws.Int32(input.NodeCount * 2),
 		},
 		InstanceTypes: []string{input.InstanceType},
-		NodeRole:      aws.String(fmt.Sprintf("arn:aws:iam::*:role/%s-node-role", input.ClusterName)),
-		Tags:          eksTags(input.Environment, input.Team),
+		NodeRole: aws.String(
+			fmt.Sprintf("arn:aws:iam::*:role/%s-node-role", input.ClusterName),
+		),
+		Tags: eksTags(input.Environment, input.Team),
 	})
 	return err
 }
@@ -322,7 +348,10 @@ func (a *AWSActivities) DeleteRouteTables(ctx context.Context, input DeleteRoute
 	return nil
 }
 
-func (a *AWSActivities) DetachDeleteInternetGateway(ctx context.Context, input DetachDeleteInternetGatewayInput) error {
+func (a *AWSActivities) DetachDeleteInternetGateway(
+	ctx context.Context,
+	input DetachDeleteInternetGatewayInput,
+) error {
 	client, err := newEC2Client(ctx, a, input.Region)
 	if err != nil {
 		return err

@@ -21,7 +21,10 @@ type SpinDownNetworkInput struct {
 	VpcID  string
 }
 
-func SpinUpNetworkWorkflow(ctx workflow.Context, input SpinUpNetworkInput) (SpinUpNetworkOutput, error) {
+func SpinUpNetworkWorkflow(
+	ctx workflow.Context,
+	input SpinUpNetworkInput,
+) (SpinUpNetworkOutput, error) {
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	aws := &activities.AWSActivities{}
 
@@ -50,7 +53,8 @@ func SpinUpNetworkWorkflow(ctx workflow.Context, input SpinUpNetworkInput) (Spin
 		VpcID:       vpcID,
 		Environment: input.Environment,
 		Team:        input.Team,
-	}).Get(ctx, &igwID); err != nil {
+	}).
+		Get(ctx, &igwID); err != nil {
 		return SpinUpNetworkOutput{}, err
 	}
 
@@ -61,7 +65,8 @@ func SpinUpNetworkWorkflow(ctx workflow.Context, input SpinUpNetworkInput) (Spin
 		SubnetIDs:   subnetIDs,
 		Environment: input.Environment,
 		Team:        input.Team,
-	}).Get(ctx, nil); err != nil {
+	}).
+		Get(ctx, nil); err != nil {
 		return SpinUpNetworkOutput{}, err
 	}
 
@@ -82,14 +87,16 @@ func SpinDownNetworkWorkflow(ctx workflow.Context, input SpinDownNetworkInput) e
 	if err := workflow.ExecuteActivity(ctx, aws.DeleteRouteTables, activities.DeleteRouteTablesInput{
 		Region: input.Region,
 		VpcID:  input.VpcID,
-	}).Get(ctx, nil); err != nil {
+	}).
+		Get(ctx, nil); err != nil {
 		return err
 	}
 
 	if err := workflow.ExecuteActivity(ctx, aws.DetachDeleteInternetGateway, activities.DetachDeleteInternetGatewayInput{
 		Region: input.Region,
 		VpcID:  input.VpcID,
-	}).Get(ctx, nil); err != nil {
+	}).
+		Get(ctx, nil); err != nil {
 		return err
 	}
 
