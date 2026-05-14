@@ -19,6 +19,9 @@ spec:
       containers:
         - name: api
           image: amertz08/gitops-example
+          envFrom:
+            - configMapRef:
+                name: gitops-example-config
           ports:
             - containerPort: 1323
           resources:

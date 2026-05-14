@@ -8,3 +8,9 @@ resources:
 images:
   - name: amertz08/gitops-example
     newTag: 1ebd9e4de4f4171695c004ce249a355df3044107
+
+configMapGenerator:
+  - name: gitops-example-config
+    literals:
+      - LOG_LEVEL=info
+      - PORT=1323
