@@ -115,8 +115,11 @@ jobs:
                   maxDuration: 3m
           EOF
           git add deploy/argocd/branches/${SAFE_BRANCH}.yaml
-          git diff --staged --quiet || git commit -m "chore: register ArgoCD app for branch ${BRANCH}"
-          git push origin main
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: register ArgoCD app for branch ${BRANCH}"
+            git pull --rebase origin main
+            git push origin main
+          fi
 
   cleanup-branch:
     if: github.event_name == 'delete' && github.event.ref_type == 'branch'
