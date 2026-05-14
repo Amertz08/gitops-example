@@ -18,8 +18,9 @@ Requires `golines` (`go install github.com/segmentio/golines@latest`). The pre-c
 # Run locally
 go run ./cmd/api/main.go
 
-# Build binary
+# Build binaries
 go build -o api ./cmd/api/
+go build -o worker ./cmd/worker/
 
 # Run tests
 go test -v ./...
@@ -42,4 +43,15 @@ The Dockerfile uses a three-stage build:
 
 ## CI/CD
 
-The GitHub Actions workflow (`.github/workflows/docker-build-push.yml`) is **manual-trigger only** (`workflow_dispatch`). It builds and pushes the image to Docker Hub under `amertz08/gitops-example` tagged with both the commit SHA and `latest`. Requires `REGISTRY_USERNAME` and `REGISTRY_PASSWORD` repository secrets.
+Two GitHub Actions workflows trigger automatically on push. Both push to Docker Hub under `amertz08/` and require `REGISTRY_USERNAME` and `REGISTRY_PASSWORD` repository secrets.
+
+**API** (`.github/workflows/docker-build-push-api.yml`) — triggers on changes to `cmd/api/main.go`:
+- Pushes `amertz08/gitops-example:<sha>` and `:latest` (main) or `:<branch>-latest` (other branches)
+- On main: updates the prod ArgoCD image tag
+- On non-main branches: registers an ArgoCD preview app; cleans it up on branch deletion
+
+**Worker** (`.github/workflows/docker-build-push-worker.yml`) — triggers on changes to `cmd/worker/**` or `internal/**`:
+- Pushes `amertz08/gitops-example-worker:<sha>` and `:latest` (main) or `:<branch>-latest` (other branches)
+- On main: updates the prod ArgoCD image tag
+
+Both workflows use a shared reusable workflow (`.github/workflows/reusable-docker-build-push.yml`) that builds for `linux/amd64` with GitHub Actions cache.
