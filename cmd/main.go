@@ -8,6 +8,7 @@ import (
 )
 
 func main() {
+	// just a comment
 	e := echo.New()
 	e.Use(middleware.RequestLogger())
 
