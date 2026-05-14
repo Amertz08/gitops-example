@@ -21,11 +21,19 @@ type SpinDownEKSInput struct {
 	ClusterName string
 }
 
-func SpinUpEKSWorkflow(ctx workflow.Context, input SpinUpEKSInput) error {
+func SpinUpEKSWorkflow(ctx workflow.Context, input SpinUpEKSInput) (err error) {
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	aws := &activities.AWSActivities{}
+	logger := workflow.GetLogger(ctx)
 
-	if err := workflow.ExecuteActivity(ctx, aws.CreateEKSCluster, activities.CreateEKSClusterInput{
+	var s Saga
+	defer func() {
+		if err != nil {
+			s.Compensate(ctx)
+		}
+	}()
+
+	if err = workflow.ExecuteActivity(ctx, aws.CreateEKSCluster, activities.CreateEKSClusterInput{
 		Region:      input.Region,
 		ClusterName: input.ClusterName,
 		VpcID:       input.VpcID,
@@ -33,10 +41,25 @@ func SpinUpEKSWorkflow(ctx workflow.Context, input SpinUpEKSInput) error {
 		Environment: input.Environment,
 		Team:        input.Team,
 	}).Get(ctx, nil); err != nil {
-		return err
+		return
 	}
+	s.AddCompensation(func(cctx workflow.Context) {
+		if err := workflow.ExecuteActivity(cctx, aws.DeleteEKSCluster, activities.DeleteEKSClusterInput{
+			Region:      input.Region,
+			ClusterName: input.ClusterName,
+		}).
+			Get(cctx, nil); err != nil {
+			logger.Error(
+				"saga: failed to delete EKS cluster",
+				"clusterName",
+				input.ClusterName,
+				"error",
+				err,
+			)
+		}
+	})
 
-	return workflow.ExecuteActivity(ctx, aws.CreateNodeGroup, activities.CreateNodeGroupInput{
+	err = workflow.ExecuteActivity(ctx, aws.CreateNodeGroup, activities.CreateNodeGroupInput{
 		Region:       input.Region,
 		ClusterName:  input.ClusterName,
 		SubnetIDs:    input.SubnetIDs,
@@ -45,6 +68,7 @@ func SpinUpEKSWorkflow(ctx workflow.Context, input SpinUpEKSInput) error {
 		Environment:  input.Environment,
 		Team:         input.Team,
 	}).Get(ctx, nil)
+	return
 }
 
 func SpinDownEKSWorkflow(ctx workflow.Context, input SpinDownEKSInput) error {

@@ -49,21 +49,37 @@ func (i SpinUpInput) validate() error {
 	return nil
 }
 
-func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) error {
-	if err := input.validate(); err != nil {
-		return temporal.NewNonRetryableApplicationError(err.Error(), "InvalidInput", err)
+func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) (err error) {
+	if valErr := input.validate(); valErr != nil {
+		return temporal.NewNonRetryableApplicationError(valErr.Error(), "InvalidInput", valErr)
 	}
 
+	logger := workflow.GetLogger(ctx)
+	var s Saga
+	defer func() {
+		if err != nil {
+			s.Compensate(ctx)
+		}
+	}()
+
 	var network SpinUpNetworkOutput
-	if err := workflow.ExecuteChildWorkflow(ctx, SpinUpNetworkWorkflow, SpinUpNetworkInput{
+	if err = workflow.ExecuteChildWorkflow(ctx, SpinUpNetworkWorkflow, SpinUpNetworkInput{
 		Region:      input.Region,
 		Environment: input.Environment,
 		Team:        input.Team,
 	}).Get(ctx, &network); err != nil {
-		return err
+		return
 	}
+	s.AddCompensation(func(cctx workflow.Context) {
+		if err := workflow.ExecuteChildWorkflow(cctx, SpinDownNetworkWorkflow, SpinDownNetworkInput{
+			Region: input.Region,
+			VpcID:  network.VpcID,
+		}).Get(cctx, nil); err != nil {
+			logger.Error("saga: failed to spin down network", "vpcID", network.VpcID, "error", err)
+		}
+	})
 
-	return workflow.ExecuteChildWorkflow(ctx, SpinUpEKSWorkflow, SpinUpEKSInput{
+	err = workflow.ExecuteChildWorkflow(ctx, SpinUpEKSWorkflow, SpinUpEKSInput{
 		Region:           input.Region,
 		ClusterName:      input.ClusterName,
 		VpcID:            network.VpcID,
@@ -73,6 +89,7 @@ func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) error {
 		Environment:      input.Environment,
 		Team:             input.Team,
 	}).Get(ctx, nil)
+	return
 }
 
 func (i SpinDownInput) validate() error {
