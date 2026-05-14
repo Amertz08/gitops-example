@@ -70,6 +70,7 @@ func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) (err error) {
 	}).Get(ctx, &network); err != nil {
 		return
 	}
+	logger.Info("network ready", "vpcID", network.VpcID, "subnetCount", len(network.SubnetIDs))
 	s.AddCompensation(func(cctx workflow.Context) {
 		if err := workflow.ExecuteChildWorkflow(cctx, SpinDownNetworkWorkflow, SpinDownNetworkInput{
 			Region: input.Region,
@@ -79,7 +80,7 @@ func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) (err error) {
 		}
 	})
 
-	err = workflow.ExecuteChildWorkflow(ctx, SpinUpEKSWorkflow, SpinUpEKSInput{
+	if err = workflow.ExecuteChildWorkflow(ctx, SpinUpEKSWorkflow, SpinUpEKSInput{
 		Region:           input.Region,
 		ClusterName:      input.ClusterName,
 		VpcID:            network.VpcID,
@@ -88,7 +89,10 @@ func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) (err error) {
 		NodeInstanceType: input.NodeInstanceType,
 		Environment:      input.Environment,
 		Team:             input.Team,
-	}).Get(ctx, nil)
+	}).Get(ctx, nil); err != nil {
+		return
+	}
+	logger.Info("spin up complete", "clusterName", input.ClusterName, "vpcID", network.VpcID)
 	return
 }
 
@@ -109,15 +113,22 @@ func SpinDownWorkflow(ctx workflow.Context, input SpinDownInput) error {
 		return temporal.NewNonRetryableApplicationError(err.Error(), "InvalidInput", err)
 	}
 
+	logger := workflow.GetLogger(ctx)
+
 	if err := workflow.ExecuteChildWorkflow(ctx, SpinDownEKSWorkflow, SpinDownEKSInput{
 		Region:      input.Region,
 		ClusterName: input.ClusterName,
 	}).Get(ctx, nil); err != nil {
 		return err
 	}
+	logger.Info("EKS torn down", "clusterName", input.ClusterName)
 
-	return workflow.ExecuteChildWorkflow(ctx, SpinDownNetworkWorkflow, SpinDownNetworkInput{
+	if err := workflow.ExecuteChildWorkflow(ctx, SpinDownNetworkWorkflow, SpinDownNetworkInput{
 		Region: input.Region,
 		VpcID:  input.VpcID,
-	}).Get(ctx, nil)
+	}).Get(ctx, nil); err != nil {
+		return err
+	}
+	logger.Info("spin down complete", "clusterName", input.ClusterName, "vpcID", input.VpcID)
+	return nil
 }
