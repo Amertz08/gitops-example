@@ -27,7 +27,11 @@ func main() {
 	w := worker.New(c, taskQueue, worker.Options{})
 
 	w.RegisterWorkflow(workflows.SpinUpWorkflow)
+	w.RegisterWorkflow(workflows.SpinUpNetworkWorkflow)
+	w.RegisterWorkflow(workflows.SpinUpEKSWorkflow)
 	w.RegisterWorkflow(workflows.SpinDownWorkflow)
+	w.RegisterWorkflow(workflows.SpinDownEKSWorkflow)
+	w.RegisterWorkflow(workflows.SpinDownNetworkWorkflow)
 	w.RegisterActivity(&activities.AWSActivities{})
 
 	if err := w.Run(worker.InterruptCh()); err != nil {

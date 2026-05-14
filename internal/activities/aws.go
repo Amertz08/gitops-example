@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -167,7 +168,7 @@ func (a *AWSActivities) CreateEKSCluster(
 	return waiter.Wait(
 		ctx,
 		&eks.DescribeClusterInput{Name: aws.String(clusterName)},
-		30*60*1000*1000*1000,
+		30 * time.Minute,
 	)
 }
 
@@ -216,7 +217,7 @@ func (a *AWSActivities) DeleteNodeGroup(ctx context.Context, region, clusterName
 	return waiter.Wait(ctx, &eks.DescribeNodegroupInput{
 		ClusterName:   aws.String(clusterName),
 		NodegroupName: aws.String(clusterName + "-nodes"),
-	}, 30*60*1000*1000*1000)
+	}, 30 * time.Minute)
 }
 
 func (a *AWSActivities) DeleteEKSCluster(
@@ -246,7 +247,7 @@ func (a *AWSActivities) DeleteEKSCluster(
 	if err := waiter.Wait(
 		ctx,
 		&eks.DescribeClusterInput{Name: aws.String(clusterName)},
-		30*60*1000*1000*1000,
+		30 * time.Minute,
 	); err != nil {
 		return "", err
 	}
