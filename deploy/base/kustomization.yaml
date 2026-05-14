@@ -4,9 +4,12 @@ kind: Kustomization
 resources:
   - deployment.yaml
   - service.yaml
+  - worker-deployment.yaml
 
 configMapGenerator:
   - name: gitops-example-config
     literals:
       - LOG_LEVEL=debug
       - PORT=1323
+      - TEMPORAL_HOST=temporal-frontend.temporal:7233
+      - AWS_REGION=us-east-1
