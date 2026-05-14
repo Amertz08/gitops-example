@@ -111,29 +111,33 @@ func (a *AWSActivities) CreateSubnets(ctx context.Context, region, vpcID, enviro
 	return subnetIDs, nil
 }
 
-func (a *AWSActivities) CreateInternetGateway(ctx context.Context, region, vpcID, environment, team string) error {
+func (a *AWSActivities) CreateInternetGateway(ctx context.Context, region, vpcID, environment, team string) (string, error) {
 	client, err := newEC2Client(ctx, a, region)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	igwOut, err := client.CreateInternetGateway(ctx, &ec2.CreateInternetGatewayInput{
 		TagSpecifications: ec2TagSpec(ec2types.ResourceTypeInternetGateway, environment, team),
 	})
 	if err != nil {
-		return fmt.Errorf("create IGW: %w", err)
+		return "", fmt.Errorf("create IGW: %w", err)
 	}
 
-	_, err = client.AttachInternetGateway(ctx, &ec2.AttachInternetGatewayInput{
-		InternetGatewayId: igwOut.InternetGateway.InternetGatewayId,
+	igwID := igwOut.InternetGateway.InternetGatewayId
+	if _, err = client.AttachInternetGateway(ctx, &ec2.AttachInternetGatewayInput{
+		InternetGatewayId: igwID,
 		VpcId:             aws.String(vpcID),
-	})
-	return err
+	}); err != nil {
+		return "", fmt.Errorf("attach IGW: %w", err)
+	}
+
+	return *igwID, nil
 }
 
 func (a *AWSActivities) ConfigureRouteTables(
 	ctx context.Context,
-	region, vpcID string,
+	region, vpcID, igwID string,
 	subnetIDs []string,
 	environment, team string,
 ) error {
@@ -151,19 +155,10 @@ func (a *AWSActivities) ConfigureRouteTables(
 	}
 	rtID := *rtOut.RouteTable.RouteTableId
 
-	igws, err := client.DescribeInternetGateways(ctx, &ec2.DescribeInternetGatewaysInput{
-		Filters: []ec2types.Filter{
-			{Name: aws.String("attachment.vpc-id"), Values: []string{vpcID}},
-		},
-	})
-	if err != nil || len(igws.InternetGateways) == 0 {
-		return fmt.Errorf("describe IGWs: %w", err)
-	}
-
 	_, err = client.CreateRoute(ctx, &ec2.CreateRouteInput{
 		RouteTableId:         aws.String(rtID),
 		DestinationCidrBlock: aws.String("0.0.0.0/0"),
-		GatewayId:            igws.InternetGateways[0].InternetGatewayId,
+		GatewayId:            aws.String(igwID),
 	})
 	if err != nil {
 		return fmt.Errorf("create default route: %w", err)

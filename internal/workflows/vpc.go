@@ -37,12 +37,13 @@ func SpinUpNetworkWorkflow(ctx workflow.Context, input SpinUpNetworkInput) (Spin
 		return SpinUpNetworkOutput{}, err
 	}
 
+	var igwID string
 	if err := workflow.ExecuteActivity(ctx, aws.CreateInternetGateway, input.Region, vpcID, input.Environment, input.Team).
-		Get(ctx, nil); err != nil {
+		Get(ctx, &igwID); err != nil {
 		return SpinUpNetworkOutput{}, err
 	}
 
-	if err := workflow.ExecuteActivity(ctx, aws.ConfigureRouteTables, input.Region, vpcID, subnetIDs, input.Environment, input.Team).
+	if err := workflow.ExecuteActivity(ctx, aws.ConfigureRouteTables, input.Region, vpcID, igwID, subnetIDs, input.Environment, input.Team).
 		Get(ctx, nil); err != nil {
 		return SpinUpNetworkOutput{}, err
 	}
