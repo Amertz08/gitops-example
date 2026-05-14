@@ -1,0 +1,31 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitops-example-feature-temporal-infra-workflows
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Amertz08/gitops-example
+    targetRevision: feature/temporal-infra-workflows
+    path: deploy/base
+    kustomize:
+      images:
+        - amertz08/gitops-example:feature-temporal-infra-workflows-latest
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gitops-example-feature-temporal-infra-workflows
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
