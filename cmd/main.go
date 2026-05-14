@@ -14,7 +14,7 @@ func main() {
 	e.Use(middleware.RequestLogger())
 
 	e.GET("/", func(c *echo.Context) error {
-		return c.String(http.StatusOK, "Hello, World!")
+		return c.String(http.StatusOK, "Hello, GitOps!")
 	})
 
 	e.GET("/healthz", func(c *echo.Context) error {
