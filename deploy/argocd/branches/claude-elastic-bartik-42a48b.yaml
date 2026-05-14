@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitops-example-claude-elastic-bartik-42a48b
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Amertz08/gitops-example
+    targetRevision: claude/elastic-bartik-42a48b
+    path: deploy/base
+    kustomize:
+      images:
+        - amertz08/gitops-example:claude-elastic-bartik-42a48b-latest
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gitops-example-claude-elastic-bartik-42a48b
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
