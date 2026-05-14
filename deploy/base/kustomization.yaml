@@ -7,7 +7,7 @@ resources:
 
 images:
   - name: amertz08/gitops-example
-    newTag: 02254f0c2c0d85afe82bd4ec7ef7b70d3793133a
+    newTag: 442d6b959e52f4a0386588642f2083f1eb8015d0
 
 configMapGenerator:
   - name: gitops-example-config
