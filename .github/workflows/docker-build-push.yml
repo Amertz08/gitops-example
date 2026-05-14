@@ -3,7 +3,7 @@ name: Build and Push Docker Image
 on:
   push:
     branches:
-      - main
+      - '**'
     paths:
       - cmd/**
       - internal/**
@@ -22,6 +22,15 @@ jobs:
       - name: Set lowercase image name
         run: echo "IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
+      - name: Set image tags
+        run: |
+          BRANCH=$(echo "${{ github.ref_name }}" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "TAGS=docker.io/${{ env.IMAGE_NAME }}:${{ github.sha }},docker.io/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_ENV
+          else
+            echo "TAGS=docker.io/${{ env.IMAGE_NAME }}:${{ github.sha }},docker.io/${{ env.IMAGE_NAME }}:${BRANCH}-latest" >> $GITHUB_ENV
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -37,7 +46,7 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: docker.io/${{ env.IMAGE_NAME }}:${{ github.sha }},docker.io/${{ env.IMAGE_NAME }}:latest
+          tags: ${{ env.TAGS }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           labels: |
@@ -53,6 +62,7 @@ jobs:
             org.opencontainers.image.version=${{ github.ref_name }}
 
       - name: Update image tag in kustomization
+        if: github.ref_name == 'main'
         run: |
           sed -i "s/newTag:.*/newTag: ${{ github.sha }}/" deploy/base/kustomization.yaml
           git config user.name "github-actions[bot]"
