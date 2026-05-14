@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitops-example
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Amertz08/gitops-example
+    targetRevision: HEAD
+    path: deploy/base
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gitops-example
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
