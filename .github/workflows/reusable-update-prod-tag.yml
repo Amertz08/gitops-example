@@ -1,0 +1,33 @@
+name: Reusable - Update Prod Image Tag
+
+on:
+  workflow_call:
+    inputs:
+      image_name_pattern:
+        description: Sed address pattern matching the image name line in kustomization.yaml
+        type: string
+        required: true
+      commit_message_label:
+        description: Label used in the commit message (e.g. "api" or "worker")
+        type: string
+        default: "image"
+
+permissions:
+  contents: write
+
+jobs:
+  update-prod-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Update prod image tag
+        run: |
+          sed -i '/${{ inputs.image_name_pattern }}/{n; s/newTag:.*/newTag: ${{ github.sha }}/}' deploy/overlays/prod/kustomization.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add deploy/overlays/prod/kustomization.yaml
+          git commit -m "chore: update prod ${{ inputs.commit_message_label }} image tag to ${{ github.sha }}"
+          git pull --rebase origin main
+          git push

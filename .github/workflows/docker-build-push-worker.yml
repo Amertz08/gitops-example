@@ -1,0 +1,32 @@
+name: Build and Push Worker Image
+
+on:
+  push:
+    branches:
+      - '**'
+    paths:
+      - cmd/worker/**
+      - internal/**
+      - .github/workflows/docker-build-push-worker.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-push:
+    uses: ./.github/workflows/reusable-docker-build-push.yml
+    with:
+      image_suffix: "-worker"
+      dockerfile_target: worker-release-stage
+      image_title_suffix: "-worker"
+      image_description: GitOps Example Temporal Worker
+    secrets: inherit
+
+  update-prod-tag:
+    if: github.ref_name == 'main'
+    needs: build-and-push
+    uses: ./.github/workflows/reusable-update-prod-tag.yml
+    with:
+      image_name_pattern: amertz08\/gitops-example-worker
+      commit_message_label: worker
+    secrets: inherit
