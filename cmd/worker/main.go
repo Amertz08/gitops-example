@@ -1,12 +1,13 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/Amertz08/gitops-example/internal/activities"
 	"github.com/Amertz08/gitops-example/internal/workflows"
 	"go.temporal.io/sdk/client"
+	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/worker"
 )
 
@@ -18,9 +19,16 @@ func main() {
 		temporalHost = "localhost:7233"
 	}
 
-	c, err := client.Dial(client.Options{HostPort: temporalHost})
+	slogLogger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	temporalLogger := sdklog.NewStructuredLogger(slogLogger)
+
+	c, err := client.Dial(client.Options{
+		HostPort: temporalHost,
+		Logger:   temporalLogger,
+	})
 	if err != nil {
-		log.Fatalf("failed to connect to Temporal: %v", err)
+		slogLogger.Error("failed to connect to Temporal", "error", err)
+		os.Exit(1)
 	}
 	defer c.Close()
 
@@ -34,7 +42,10 @@ func main() {
 	w.RegisterWorkflow(workflows.SpinDownNetworkWorkflow)
 	w.RegisterActivity(activities.NewAWSActivities(os.Getenv("AWS_ROLE_ARN")))
 
+	slogLogger.Info("worker starting", "taskQueue", taskQueue, "temporalHost", temporalHost)
+
 	if err := w.Run(worker.InterruptCh()); err != nil {
-		log.Fatalf("worker error: %v", err)
+		slogLogger.Error("worker stopped", "error", err)
+		os.Exit(1)
 	}
 }
