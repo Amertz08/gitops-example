@@ -23,22 +23,6 @@ type SpinUpInput struct {
 	Subnets          []activities.SubnetConfig
 }
 
-type SpinDownInput struct {
-	Region          string
-	ClusterName     string
-	VpcID           string
-	ClusterRoleName string
-	NodeRoleName    string
-}
-
-var activityOptions = workflow.ActivityOptions{
-	StartToCloseTimeout: 30 * time.Minute,
-	RetryPolicy: &temporal.RetryPolicy{
-		MaximumAttempts: 3,
-		InitialInterval: 10 * time.Second,
-	},
-}
-
 func (i SpinUpInput) validate() error {
 	switch {
 	case i.Region == "":
@@ -60,6 +44,34 @@ func (i SpinUpInput) validate() error {
 		}
 	}
 	return nil
+}
+
+type SpinDownInput struct {
+	Region          string
+	ClusterName     string
+	VpcID           string
+	ClusterRoleName string
+	NodeRoleName    string
+}
+
+func (i SpinDownInput) validate() error {
+	switch {
+	case i.Region == "":
+		return fmt.Errorf("Region is required")
+	case i.ClusterName == "":
+		return fmt.Errorf("ClusterName is required")
+	case i.VpcID == "":
+		return fmt.Errorf("VpcID is required")
+	}
+	return nil
+}
+
+var activityOptions = workflow.ActivityOptions{
+	StartToCloseTimeout: 30 * time.Minute,
+	RetryPolicy: &temporal.RetryPolicy{
+		MaximumAttempts: 3,
+		InitialInterval: 10 * time.Second,
+	},
 }
 
 func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) (err error) {
@@ -147,18 +159,6 @@ func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) (err error) {
 	}
 	logger.Info("spin up complete", "clusterName", input.ClusterName, "vpcID", network.VpcID)
 	return
-}
-
-func (i SpinDownInput) validate() error {
-	switch {
-	case i.Region == "":
-		return fmt.Errorf("Region is required")
-	case i.ClusterName == "":
-		return fmt.Errorf("ClusterName is required")
-	case i.VpcID == "":
-		return fmt.Errorf("VpcID is required")
-	}
-	return nil
 }
 
 func SpinDownWorkflow(ctx workflow.Context, input SpinDownInput) error {
