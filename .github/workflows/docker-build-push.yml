@@ -10,7 +10,7 @@ on:
       - .github/workflows/docker-build-push.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-and-push:
@@ -51,3 +51,12 @@ jobs:
             org.opencontainers.image.created=${{ github.event.created_at }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ github.ref_name }}
+
+      - name: Update image tag in kustomization
+        run: |
+          sed -i "s/newTag:.*/newTag: ${{ github.sha }}/" deploy/base/kustomization.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add deploy/base/kustomization.yaml
+          git commit -m "chore: update image tag to ${{ github.sha }}"
+          git push
