@@ -88,13 +88,19 @@ type DeleteVPCInput struct {
 	VpcID  string
 }
 
+type InlinePolicy struct {
+	Name     string
+	Document string // JSON policy document
+}
+
 type CreateIAMRoleInput struct {
-	RoleName    string
-	Description string
-	TrustPolicy string
-	PolicyARNs  []string
-	Environment string
-	Team        string
+	RoleName       string
+	Description    string
+	TrustPolicy    string
+	PolicyARNs     []string
+	InlinePolicies []InlinePolicy
+	Environment    string
+	Team           string
 }
 
 type DeleteIAMRoleInput struct {
