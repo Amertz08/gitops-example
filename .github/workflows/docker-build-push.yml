@@ -8,12 +8,14 @@ on:
       - cmd/**
       - internal/**
       - .github/workflows/docker-build-push.yml
+  delete:
 
 permissions:
   contents: write
 
 jobs:
   build-and-push:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -70,3 +72,69 @@ jobs:
           git add deploy/base/kustomization.yaml
           git commit -m "chore: update image tag to ${{ github.sha }}"
           git push
+
+      - name: Register branch with ArgoCD
+        if: github.ref_name != 'main'
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          SAFE_BRANCH=$(echo "${BRANCH}" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          mkdir -p deploy/argocd/branches
+          cat > deploy/argocd/branches/${SAFE_BRANCH}.yaml <<EOF
+          apiVersion: argoproj.io/v1alpha1
+          kind: Application
+          metadata:
+            name: gitops-example-${SAFE_BRANCH}
+            namespace: argocd
+          spec:
+            project: default
+            source:
+              repoURL: https://github.com/${{ github.repository }}
+              targetRevision: ${BRANCH}
+              path: deploy/base
+              kustomize:
+                images:
+                  - amertz08/gitops-example:${SAFE_BRANCH}-latest
+            destination:
+              server: https://kubernetes.default.svc
+              namespace: gitops-example-${SAFE_BRANCH}
+            syncPolicy:
+              automated:
+                prune: true
+                selfHeal: true
+              syncOptions:
+                - CreateNamespace=true
+              retry:
+                limit: 3
+                backoff:
+                  duration: 10s
+                  factor: 2
+                  maxDuration: 3m
+          EOF
+          git add deploy/argocd/branches/${SAFE_BRANCH}.yaml
+          git diff --staged --quiet || git commit -m "chore: register ArgoCD app for branch ${BRANCH}"
+          git push origin main
+
+  cleanup-branch:
+    if: github.event_name == 'delete' && github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Remove branch ArgoCD application
+        run: |
+          BRANCH="${{ github.event.ref }}"
+          SAFE_BRANCH=$(echo "${BRANCH}" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+          if [ -f "deploy/argocd/branches/${SAFE_BRANCH}.yaml" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git rm deploy/argocd/branches/${SAFE_BRANCH}.yaml
+            git commit -m "chore: remove ArgoCD app for deleted branch ${BRANCH}"
+            git push origin main
+          fi
