@@ -1,7 +1,14 @@
 package activities
 
+type SubnetConfig struct {
+	CIDR             string
+	AvailabilityZone string
+	Public           bool
+}
+
 type CreateVPCInput struct {
 	Region      string
+	VpcCIDR     string
 	Environment string
 	Team        string
 }
@@ -9,6 +16,7 @@ type CreateVPCInput struct {
 type CreateSubnetsInput struct {
 	Region      string
 	VpcID       string
+	Subnets     []SubnetConfig
 	Environment string
 	Team        string
 }

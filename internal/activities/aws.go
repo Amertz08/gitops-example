@@ -80,15 +80,34 @@ func (a *AWSActivities) CreateVPC(ctx context.Context, input CreateVPCInput) (st
 		return "", err
 	}
 
+	cidr := input.VpcCIDR
+	if cidr == "" {
+		cidr = "10.0.0.0/16"
+	}
+
 	out, err := client.CreateVpc(ctx, &ec2.CreateVpcInput{
-		CidrBlock:         aws.String("10.0.0.0/16"),
+		CidrBlock:         aws.String(cidr),
 		TagSpecifications: ec2TagSpec(ec2types.ResourceTypeVpc, input.Environment, input.Team),
 	})
 	if err != nil {
 		return "", fmt.Errorf("create VPC: %w", err)
 	}
 
-	return *out.Vpc.VpcId, nil
+	vpcID := out.Vpc.VpcId
+	if _, err = client.ModifyVpcAttribute(ctx, &ec2.ModifyVpcAttributeInput{
+		VpcId:            vpcID,
+		EnableDnsSupport: &ec2types.AttributeBooleanValue{Value: aws.Bool(true)},
+	}); err != nil {
+		return "", fmt.Errorf("enable DNS support: %w", err)
+	}
+	if _, err = client.ModifyVpcAttribute(ctx, &ec2.ModifyVpcAttributeInput{
+		VpcId:              vpcID,
+		EnableDnsHostnames: &ec2types.AttributeBooleanValue{Value: aws.Bool(true)},
+	}); err != nil {
+		return "", fmt.Errorf("enable DNS hostnames: %w", err)
+	}
+
+	return *vpcID, nil
 }
 
 func (a *AWSActivities) CreateSubnets(
@@ -100,22 +119,42 @@ func (a *AWSActivities) CreateSubnets(
 		return nil, err
 	}
 
-	cidrs := []string{"10.0.1.0/24", "10.0.2.0/24"}
+	subnets := input.Subnets
+	if len(subnets) == 0 {
+		subnets = []SubnetConfig{
+			{CIDR: "10.0.1.0/24"},
+			{CIDR: "10.0.2.0/24"},
+		}
+	}
+
 	var subnetIDs []string
-	for _, cidr := range cidrs {
-		out, err := client.CreateSubnet(ctx, &ec2.CreateSubnetInput{
+	for _, sc := range subnets {
+		req := &ec2.CreateSubnetInput{
 			VpcId:     aws.String(input.VpcID),
-			CidrBlock: aws.String(cidr),
+			CidrBlock: aws.String(sc.CIDR),
 			TagSpecifications: ec2TagSpec(
 				ec2types.ResourceTypeSubnet,
 				input.Environment,
 				input.Team,
 			),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("create subnet %s: %w", cidr, err)
 		}
-		subnetIDs = append(subnetIDs, *out.Subnet.SubnetId)
+		if sc.AvailabilityZone != "" {
+			req.AvailabilityZone = aws.String(sc.AvailabilityZone)
+		}
+		out, err := client.CreateSubnet(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("create subnet %s: %w", sc.CIDR, err)
+		}
+		subnetID := out.Subnet.SubnetId
+		if sc.Public {
+			if _, err = client.ModifySubnetAttribute(ctx, &ec2.ModifySubnetAttributeInput{
+				SubnetId:            subnetID,
+				MapPublicIpOnLaunch: &ec2types.AttributeBooleanValue{Value: aws.Bool(true)},
+			}); err != nil {
+				return nil, fmt.Errorf("enable public IP for subnet %s: %w", sc.CIDR, err)
+			}
+		}
+		subnetIDs = append(subnetIDs, *subnetID)
 	}
 
 	return subnetIDs, nil

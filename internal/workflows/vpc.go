@@ -7,6 +7,8 @@ import (
 
 type SpinUpNetworkInput struct {
 	Region      string
+	VpcCIDR     string
+	Subnets     []activities.SubnetConfig
 	Environment string
 	Team        string
 }
@@ -39,6 +41,7 @@ func SpinUpNetworkWorkflow(
 	var vpcID string
 	if err = workflow.ExecuteActivity(ctx, aws.CreateVPC, activities.CreateVPCInput{
 		Region:      input.Region,
+		VpcCIDR:     input.VpcCIDR,
 		Environment: input.Environment,
 		Team:        input.Team,
 	}).Get(ctx, &vpcID); err != nil {
@@ -58,6 +61,7 @@ func SpinUpNetworkWorkflow(
 	if err = workflow.ExecuteActivity(ctx, aws.CreateSubnets, activities.CreateSubnetsInput{
 		Region:      input.Region,
 		VpcID:       vpcID,
+		Subnets:     input.Subnets,
 		Environment: input.Environment,
 		Team:        input.Team,
 	}).Get(ctx, &subnetIDs); err != nil {
