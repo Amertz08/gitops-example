@@ -43,6 +43,7 @@ func SpinUpEKSWorkflow(ctx workflow.Context, input SpinUpEKSInput) (err error) {
 	}).Get(ctx, nil); err != nil {
 		return
 	}
+	logger.Info("EKS cluster active", "clusterName", input.ClusterName)
 	s.AddCompensation(func(cctx workflow.Context) {
 		if err := workflow.ExecuteActivity(cctx, aws.DeleteEKSCluster, activities.DeleteEKSClusterInput{
 			Region:      input.Region,
@@ -59,7 +60,7 @@ func SpinUpEKSWorkflow(ctx workflow.Context, input SpinUpEKSInput) (err error) {
 		}
 	})
 
-	err = workflow.ExecuteActivity(ctx, aws.CreateNodeGroup, activities.CreateNodeGroupInput{
+	if err = workflow.ExecuteActivity(ctx, aws.CreateNodeGroup, activities.CreateNodeGroupInput{
 		Region:       input.Region,
 		ClusterName:  input.ClusterName,
 		SubnetIDs:    input.SubnetIDs,
@@ -67,13 +68,23 @@ func SpinUpEKSWorkflow(ctx workflow.Context, input SpinUpEKSInput) (err error) {
 		InstanceType: input.NodeInstanceType,
 		Environment:  input.Environment,
 		Team:         input.Team,
-	}).Get(ctx, nil)
+	}).Get(ctx, nil); err != nil {
+		return
+	}
+	logger.Info(
+		"node group created",
+		"clusterName",
+		input.ClusterName,
+		"nodeCount",
+		input.NodeCount,
+	)
 	return
 }
 
 func SpinDownEKSWorkflow(ctx workflow.Context, input SpinDownEKSInput) error {
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	aws := &activities.AWSActivities{}
+	logger := workflow.GetLogger(ctx)
 
 	if err := workflow.ExecuteActivity(ctx, aws.DeleteNodeGroup, activities.DeleteNodeGroupInput{
 		Region:      input.Region,
@@ -81,9 +92,14 @@ func SpinDownEKSWorkflow(ctx workflow.Context, input SpinDownEKSInput) error {
 	}).Get(ctx, nil); err != nil {
 		return err
 	}
+	logger.Info("node group deleted", "clusterName", input.ClusterName)
 
-	return workflow.ExecuteActivity(ctx, aws.DeleteEKSCluster, activities.DeleteEKSClusterInput{
+	if err := workflow.ExecuteActivity(ctx, aws.DeleteEKSCluster, activities.DeleteEKSClusterInput{
 		Region:      input.Region,
 		ClusterName: input.ClusterName,
-	}).Get(ctx, nil)
+	}).Get(ctx, nil); err != nil {
+		return err
+	}
+	logger.Info("EKS cluster deleted", "clusterName", input.ClusterName)
+	return nil
 }

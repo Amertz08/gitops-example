@@ -44,6 +44,7 @@ func SpinUpNetworkWorkflow(
 	}).Get(ctx, &vpcID); err != nil {
 		return
 	}
+	logger.Info("VPC created", "vpcID", vpcID)
 	s.AddCompensation(func(cctx workflow.Context) {
 		if err := workflow.ExecuteActivity(cctx, aws.DeleteVPC, activities.DeleteVPCInput{
 			Region: input.Region,
@@ -62,6 +63,7 @@ func SpinUpNetworkWorkflow(
 	}).Get(ctx, &subnetIDs); err != nil {
 		return
 	}
+	logger.Info("subnets created", "vpcID", vpcID, "count", len(subnetIDs))
 	s.AddCompensation(func(cctx workflow.Context) {
 		if err := workflow.ExecuteActivity(cctx, aws.DeleteSubnets, activities.DeleteSubnetsInput{
 			Region: input.Region,
@@ -81,6 +83,7 @@ func SpinUpNetworkWorkflow(
 		Get(ctx, &igwID); err != nil {
 		return
 	}
+	logger.Info("internet gateway created and attached", "vpcID", vpcID, "igwID", igwID)
 	s.AddCompensation(func(cctx workflow.Context) {
 		if err := workflow.ExecuteActivity(cctx, aws.DetachDeleteInternetGateway, activities.DetachDeleteInternetGatewayInput{
 			Region: input.Region,
@@ -102,6 +105,7 @@ func SpinUpNetworkWorkflow(
 		Get(ctx, nil); err != nil {
 		return
 	}
+	logger.Info("route tables configured", "vpcID", vpcID)
 	s.AddCompensation(func(cctx workflow.Context) {
 		if err := workflow.ExecuteActivity(cctx, aws.DeleteRouteTables, activities.DeleteRouteTablesInput{
 			Region: input.Region,
@@ -119,6 +123,7 @@ func SpinUpNetworkWorkflow(
 func SpinDownNetworkWorkflow(ctx workflow.Context, input SpinDownNetworkInput) error {
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	aws := &activities.AWSActivities{}
+	logger := workflow.GetLogger(ctx)
 
 	if err := workflow.ExecuteActivity(ctx, aws.DeleteSubnets, activities.DeleteSubnetsInput{
 		Region: input.Region,
@@ -126,6 +131,7 @@ func SpinDownNetworkWorkflow(ctx workflow.Context, input SpinDownNetworkInput) e
 	}).Get(ctx, nil); err != nil {
 		return err
 	}
+	logger.Info("subnets deleted", "vpcID", input.VpcID)
 
 	if err := workflow.ExecuteActivity(ctx, aws.DeleteRouteTables, activities.DeleteRouteTablesInput{
 		Region: input.Region,
@@ -134,6 +140,7 @@ func SpinDownNetworkWorkflow(ctx workflow.Context, input SpinDownNetworkInput) e
 		Get(ctx, nil); err != nil {
 		return err
 	}
+	logger.Info("route tables deleted", "vpcID", input.VpcID)
 
 	if err := workflow.ExecuteActivity(ctx, aws.DetachDeleteInternetGateway, activities.DetachDeleteInternetGatewayInput{
 		Region: input.Region,
@@ -142,9 +149,14 @@ func SpinDownNetworkWorkflow(ctx workflow.Context, input SpinDownNetworkInput) e
 		Get(ctx, nil); err != nil {
 		return err
 	}
+	logger.Info("internet gateway detached and deleted", "vpcID", input.VpcID)
 
-	return workflow.ExecuteActivity(ctx, aws.DeleteVPC, activities.DeleteVPCInput{
+	if err := workflow.ExecuteActivity(ctx, aws.DeleteVPC, activities.DeleteVPCInput{
 		Region: input.Region,
 		VpcID:  input.VpcID,
-	}).Get(ctx, nil)
+	}).Get(ctx, nil); err != nil {
+		return err
+	}
+	logger.Info("VPC deleted", "vpcID", input.VpcID)
+	return nil
 }
