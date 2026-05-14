@@ -92,58 +92,85 @@ func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) (err error) {
 	clusterRoleARN := input.ClusterRoleARN
 	nodeRoleARN := input.NodeRoleARN
 
-	if clusterRoleARN == "" {
-		var iamOut SpinUpEKSIAMOutput
-		if err = workflow.ExecuteChildWorkflow(ctx, SpinUpIAMWorkflow, SpinUpEKSIAMInput{
-			Region:      input.Region,
-			ClusterName: input.ClusterName,
-			Environment: input.Environment,
-			Team:        input.Team,
-		}).Get(ctx, &iamOut); err != nil {
-			return
-		}
-		logger.Info(
-			"IAM roles created",
-			"clusterRole",
-			iamOut.ClusterRoleName,
-			"nodeRole",
-			iamOut.NodeRoleName,
-		)
-		s.AddCompensation(func(cctx workflow.Context) {
-			if err := workflow.ExecuteChildWorkflow(
-				cctx,
-				SpinDownIAMWorkflow,
-				SpinDownEKSIAMInput{
-					ClusterRoleName: iamOut.ClusterRoleName,
-					NodeRoleName:    iamOut.NodeRoleName,
-				},
-			).Get(cctx, nil); err != nil {
-				logger.Error("saga: failed to spin down IAM roles", "error", err)
-			}
-		})
-		clusterRoleARN = iamOut.ClusterRoleARN
-		nodeRoleARN = iamOut.NodeRoleARN
-	}
-
-	var network SpinUpNetworkOutput
-	if err = workflow.ExecuteChildWorkflow(ctx, SpinUpNetworkWorkflow, SpinUpNetworkInput{
+	// Start network unconditionally; start IAM concurrently when role ARNs are not pre-supplied.
+	networkFuture := workflow.ExecuteChildWorkflow(ctx, SpinUpNetworkWorkflow, SpinUpNetworkInput{
 		Region:      input.Region,
 		VpcCIDR:     input.VpcCIDR,
 		Subnets:     input.Subnets,
 		Environment: input.Environment,
 		Team:        input.Team,
-	}).Get(ctx, &network); err != nil {
+	})
+
+	var iamFuture workflow.ChildWorkflowFuture
+	if clusterRoleARN == "" {
+		iamFuture = workflow.ExecuteChildWorkflow(ctx, SpinUpIAMWorkflow, SpinUpEKSIAMInput{
+			Region:      input.Region,
+			ClusterName: input.ClusterName,
+			Environment: input.Environment,
+			Team:        input.Team,
+		})
+	}
+
+	// Collect IAM result (if started).
+	var iamErr error
+	if iamFuture != nil {
+		var iamOut SpinUpEKSIAMOutput
+		iamErr = iamFuture.Get(ctx, &iamOut)
+		if iamErr == nil {
+			clusterRoleARN = iamOut.ClusterRoleARN
+			nodeRoleARN = iamOut.NodeRoleARN
+			logger.Info(
+				"IAM roles created",
+				"clusterRole",
+				iamOut.ClusterRoleName,
+				"nodeRole",
+				iamOut.NodeRoleName,
+			)
+			s.AddCompensation(func(cctx workflow.Context) {
+				if err := workflow.ExecuteChildWorkflow(
+					cctx,
+					SpinDownIAMWorkflow,
+					SpinDownEKSIAMInput{
+						ClusterRoleName: iamOut.ClusterRoleName,
+						NodeRoleName:    iamOut.NodeRoleName,
+					},
+				).Get(cctx, nil); err != nil {
+					logger.Error("saga: failed to spin down IAM roles", "error", err)
+				}
+			})
+		}
+	}
+
+	// Always wait for network before returning — prevents orphaned resources if IAM failed.
+	var network SpinUpNetworkOutput
+	netErr := networkFuture.Get(ctx, &network)
+	if netErr == nil {
+		logger.Info("network ready", "vpcID", network.VpcID, "subnetCount", len(network.SubnetIDs))
+		s.AddCompensation(func(cctx workflow.Context) {
+			if err := workflow.ExecuteChildWorkflow(cctx, SpinDownNetworkWorkflow, SpinDownNetworkInput{
+				Region: input.Region,
+				VpcID:  network.VpcID,
+			}).
+				Get(cctx, nil); err != nil {
+				logger.Error(
+					"saga: failed to spin down network",
+					"vpcID",
+					network.VpcID,
+					"error",
+					err,
+				)
+			}
+		})
+	}
+
+	if iamErr != nil {
+		err = iamErr
 		return
 	}
-	logger.Info("network ready", "vpcID", network.VpcID, "subnetCount", len(network.SubnetIDs))
-	s.AddCompensation(func(cctx workflow.Context) {
-		if err := workflow.ExecuteChildWorkflow(cctx, SpinDownNetworkWorkflow, SpinDownNetworkInput{
-			Region: input.Region,
-			VpcID:  network.VpcID,
-		}).Get(cctx, nil); err != nil {
-			logger.Error("saga: failed to spin down network", "vpcID", network.VpcID, "error", err)
-		}
-	})
+	if netErr != nil {
+		err = netErr
+		return
+	}
 
 	if err = workflow.ExecuteChildWorkflow(ctx, SpinUpEKSWorkflow, SpinUpEKSInput{
 		Region:           input.Region,
