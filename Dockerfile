@@ -17,7 +17,7 @@ FROM build-stage AS run-test-stage
 RUN go test -v ./...
 
 # Deploy the application binary into a lean image
-FROM gcr.io/distroless/base-debian11 AS build-release-stage
+FROM scratch AS build-release-stage
 
 WORKDIR /
 
@@ -25,6 +25,6 @@ COPY --from=build-stage /app/api /api
 
 EXPOSE 1323
 
-USER nonroot:nonroot
+USER 65532:65532
 
 ENTRYPOINT ["/api"]
