@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Amertz08/gitops-example/internal/activities"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -11,29 +12,56 @@ const eksTrustPolicy = `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","
 
 const ec2TrustPolicy = `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ec2.amazonaws.com"},"Action":"sts:AssumeRole"}]}`
 
-type SpinUpIAMInput struct {
+type SpinUpEKSIAMInput struct {
 	Region      string
 	ClusterName string
 	Environment string
 	Team        string
 }
 
-type SpinUpIAMOutput struct {
+func (i SpinUpEKSIAMInput) validate() error {
+	switch {
+	case i.ClusterName == "":
+		return fmt.Errorf("ClusterName is required")
+	case i.Environment == "":
+		return fmt.Errorf("Environment is required")
+	case i.Team == "":
+		return fmt.Errorf("Team is required")
+	}
+	return nil
+}
+
+type SpinUpEKSIAMOutput struct {
 	ClusterRoleARN  string
 	ClusterRoleName string
 	NodeRoleARN     string
 	NodeRoleName    string
 }
 
-type SpinDownIAMInput struct {
+type SpinDownEKSIAMInput struct {
 	ClusterRoleName string
 	NodeRoleName    string
 }
 
+func (i SpinDownEKSIAMInput) validate() error {
+	switch {
+	case i.ClusterRoleName == "":
+		return fmt.Errorf("ClusterRoleName is required")
+	case i.NodeRoleName == "":
+		return fmt.Errorf("NodeRoleName is required")
+	}
+	return nil
+}
+
 func SpinUpIAMWorkflow(
 	ctx workflow.Context,
-	input SpinUpIAMInput,
-) (output SpinUpIAMOutput, err error) {
+	input SpinUpEKSIAMInput,
+) (output SpinUpEKSIAMOutput, err error) {
+	if valErr := input.validate(); valErr != nil {
+		err = temporal.NewNonRetryableApplicationError(valErr.Error(), "InvalidInput", valErr)
+		return
+	}
+
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	aws := &activities.AWSActivities{}
 	logger := workflow.GetLogger(ctx)
@@ -103,7 +131,7 @@ func SpinUpIAMWorkflow(
 		}
 	})
 
-	output = SpinUpIAMOutput{
+	output = SpinUpEKSIAMOutput{
 		ClusterRoleARN:  clusterRoleARN,
 		ClusterRoleName: clusterRoleName,
 		NodeRoleARN:     nodeRoleARN,
@@ -112,7 +140,11 @@ func SpinUpIAMWorkflow(
 	return
 }
 
-func SpinDownIAMWorkflow(ctx workflow.Context, input SpinDownIAMInput) error {
+func SpinDownIAMWorkflow(ctx workflow.Context, input SpinDownEKSIAMInput) error {
+	if err := input.validate(); err != nil {
+		return temporal.NewNonRetryableApplicationError(err.Error(), "InvalidInput", err)
+	}
+
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	aws := &activities.AWSActivities{}
 	logger := workflow.GetLogger(ctx)
