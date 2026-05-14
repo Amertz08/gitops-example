@@ -7,24 +7,45 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
-type AWSActivities struct{}
+type AWSActivities struct {
+	roleARN string
+}
 
-func newEC2Client(ctx context.Context, region string) (*ec2.Client, error) {
+func NewAWSActivities(roleARN string) *AWSActivities {
+	return &AWSActivities{roleARN: roleARN}
+}
+
+func (a *AWSActivities) loadConfig(ctx context.Context, region string) (aws.Config, error) {
 	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+	if err != nil {
+		return aws.Config{}, err
+	}
+	if a.roleARN == "" {
+		return cfg, nil
+	}
+	stsSvc := sts.NewFromConfig(cfg)
+	cfg.Credentials = aws.NewCredentialsCache(stscreds.NewAssumeRoleProvider(stsSvc, a.roleARN))
+	return cfg, nil
+}
+
+func newEC2Client(ctx context.Context, a *AWSActivities, region string) (*ec2.Client, error) {
+	cfg, err := a.loadConfig(ctx, region)
 	if err != nil {
 		return nil, err
 	}
 	return ec2.NewFromConfig(cfg), nil
 }
 
-func newEKSClient(ctx context.Context, region string) (*eks.Client, error) {
-	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+func newEKSClient(ctx context.Context, a *AWSActivities, region string) (*eks.Client, error) {
+	cfg, err := a.loadConfig(ctx, region)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +53,7 @@ func newEKSClient(ctx context.Context, region string) (*eks.Client, error) {
 }
 
 func (a *AWSActivities) CreateVPC(ctx context.Context, region string) (string, error) {
-	client, err := newEC2Client(ctx, region)
+	client, err := newEC2Client(ctx, a, region)
 	if err != nil {
 		return "", err
 	}
@@ -56,7 +77,7 @@ func (a *AWSActivities) CreateVPC(ctx context.Context, region string) (string, e
 }
 
 func (a *AWSActivities) CreateSubnets(ctx context.Context, region, vpcID string) ([]string, error) {
-	client, err := newEC2Client(ctx, region)
+	client, err := newEC2Client(ctx, a, region)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +99,7 @@ func (a *AWSActivities) CreateSubnets(ctx context.Context, region, vpcID string)
 }
 
 func (a *AWSActivities) CreateInternetGateway(ctx context.Context, region, vpcID string) error {
-	client, err := newEC2Client(ctx, region)
+	client, err := newEC2Client(ctx, a, region)
 	if err != nil {
 		return err
 	}
@@ -100,7 +121,7 @@ func (a *AWSActivities) ConfigureRouteTables(
 	region, vpcID string,
 	subnetIDs []string,
 ) error {
-	client, err := newEC2Client(ctx, region)
+	client, err := newEC2Client(ctx, a, region)
 	if err != nil {
 		return err
 	}
@@ -148,7 +169,7 @@ func (a *AWSActivities) CreateEKSCluster(
 	region, clusterName, vpcID string,
 	subnetIDs []string,
 ) error {
-	client, err := newEKSClient(ctx, region)
+	client, err := newEKSClient(ctx, a, region)
 	if err != nil {
 		return err
 	}
@@ -168,7 +189,7 @@ func (a *AWSActivities) CreateEKSCluster(
 	return waiter.Wait(
 		ctx,
 		&eks.DescribeClusterInput{Name: aws.String(clusterName)},
-		30 * time.Minute,
+		30*time.Minute,
 	)
 }
 
@@ -179,7 +200,7 @@ func (a *AWSActivities) CreateNodeGroup(
 	nodeCount int32,
 	instanceType string,
 ) error {
-	client, err := newEKSClient(ctx, region)
+	client, err := newEKSClient(ctx, a, region)
 	if err != nil {
 		return err
 	}
@@ -200,7 +221,7 @@ func (a *AWSActivities) CreateNodeGroup(
 }
 
 func (a *AWSActivities) DeleteNodeGroup(ctx context.Context, region, clusterName string) error {
-	client, err := newEKSClient(ctx, region)
+	client, err := newEKSClient(ctx, a, region)
 	if err != nil {
 		return err
 	}
@@ -217,14 +238,14 @@ func (a *AWSActivities) DeleteNodeGroup(ctx context.Context, region, clusterName
 	return waiter.Wait(ctx, &eks.DescribeNodegroupInput{
 		ClusterName:   aws.String(clusterName),
 		NodegroupName: aws.String(clusterName + "-nodes"),
-	}, 30 * time.Minute)
+	}, 30*time.Minute)
 }
 
 func (a *AWSActivities) DeleteEKSCluster(
 	ctx context.Context,
 	region, clusterName string,
 ) (string, error) {
-	eksClient, err := newEKSClient(ctx, region)
+	eksClient, err := newEKSClient(ctx, a, region)
 	if err != nil {
 		return "", err
 	}
@@ -247,7 +268,7 @@ func (a *AWSActivities) DeleteEKSCluster(
 	if err := waiter.Wait(
 		ctx,
 		&eks.DescribeClusterInput{Name: aws.String(clusterName)},
-		30 * time.Minute,
+		30*time.Minute,
 	); err != nil {
 		return "", err
 	}
@@ -256,7 +277,7 @@ func (a *AWSActivities) DeleteEKSCluster(
 }
 
 func (a *AWSActivities) DeleteSubnets(ctx context.Context, region, vpcID string) error {
-	client, err := newEC2Client(ctx, region)
+	client, err := newEC2Client(ctx, a, region)
 	if err != nil {
 		return err
 	}
@@ -286,7 +307,7 @@ func (a *AWSActivities) DetachDeleteInternetGateway(
 	ctx context.Context,
 	region, vpcID string,
 ) error {
-	client, err := newEC2Client(ctx, region)
+	client, err := newEC2Client(ctx, a, region)
 	if err != nil {
 		return err
 	}
@@ -316,7 +337,7 @@ func (a *AWSActivities) DetachDeleteInternetGateway(
 }
 
 func (a *AWSActivities) DeleteVPC(ctx context.Context, region, vpcID string) error {
-	client, err := newEC2Client(ctx, region)
+	client, err := newEC2Client(ctx, a, region)
 	if err != nil {
 		return err
 	}

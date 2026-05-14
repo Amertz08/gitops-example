@@ -32,7 +32,7 @@ func main() {
 	w.RegisterWorkflow(workflows.SpinDownWorkflow)
 	w.RegisterWorkflow(workflows.SpinDownEKSWorkflow)
 	w.RegisterWorkflow(workflows.SpinDownNetworkWorkflow)
-	w.RegisterActivity(&activities.AWSActivities{})
+	w.RegisterActivity(activities.NewAWSActivities(os.Getenv("AWS_ROLE_ARN")))
 
 	if err := w.Run(worker.InterruptCh()); err != nil {
 		log.Fatalf("worker error: %v", err)
