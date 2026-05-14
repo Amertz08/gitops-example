@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/Amertz08/gitops-example/internal/activities"
-	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -63,8 +62,8 @@ func (i SpinDownEKSInput) validate() error {
 }
 
 func SpinUpEKSWorkflow(ctx workflow.Context, input SpinUpEKSInput) (err error) {
-	if valErr := input.validate(); valErr != nil {
-		return temporal.NewNonRetryableApplicationError(valErr.Error(), "InvalidInput", valErr)
+	if err = invalidInput(input); err != nil {
+		return
 	}
 
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
@@ -129,8 +128,8 @@ func SpinUpEKSWorkflow(ctx workflow.Context, input SpinUpEKSInput) (err error) {
 }
 
 func SpinDownEKSWorkflow(ctx workflow.Context, input SpinDownEKSInput) error {
-	if err := input.validate(); err != nil {
-		return temporal.NewNonRetryableApplicationError(err.Error(), "InvalidInput", err)
+	if err := invalidInput(input); err != nil {
+		return err
 	}
 
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)

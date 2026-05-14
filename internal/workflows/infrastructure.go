@@ -77,8 +77,8 @@ var activityOptions = workflow.ActivityOptions{
 }
 
 func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) (err error) {
-	if valErr := input.validate(); valErr != nil {
-		return temporal.NewNonRetryableApplicationError(valErr.Error(), "InvalidInput", valErr)
+	if err = invalidInput(input); err != nil {
+		return
 	}
 
 	logger := workflow.GetLogger(ctx)
@@ -164,8 +164,8 @@ func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) (err error) {
 }
 
 func SpinDownWorkflow(ctx workflow.Context, input SpinDownInput) error {
-	if err := input.validate(); err != nil {
-		return temporal.NewNonRetryableApplicationError(err.Error(), "InvalidInput", err)
+	if err := invalidInput(input); err != nil {
+		return err
 	}
 
 	logger := workflow.GetLogger(ctx)
