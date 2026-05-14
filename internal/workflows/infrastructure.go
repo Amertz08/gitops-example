@@ -13,6 +13,8 @@ import (
 type SpinUpInput struct {
 	Region           string
 	ClusterName      string
+	ClusterRoleARN   string
+	NodeRoleARN      string
 	NodeCount        int32
 	NodeInstanceType string
 	Environment      string
@@ -47,6 +49,10 @@ func (i SpinUpInput) validate() error {
 		return fmt.Errorf("Environment is required")
 	case i.Team == "":
 		return fmt.Errorf("Team is required")
+	case i.ClusterRoleARN == "":
+		return fmt.Errorf("ClusterRoleARN is required")
+	case i.NodeRoleARN == "":
+		return fmt.Errorf("NodeRoleARN is required")
 	case i.NodeCount <= 0:
 		return fmt.Errorf("NodeCount must be greater than 0")
 	}
@@ -94,6 +100,8 @@ func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) (err error) {
 	if err = workflow.ExecuteChildWorkflow(ctx, SpinUpEKSWorkflow, SpinUpEKSInput{
 		Region:           input.Region,
 		ClusterName:      input.ClusterName,
+		ClusterRoleARN:   input.ClusterRoleARN,
+		NodeRoleARN:      input.NodeRoleARN,
 		VpcID:            network.VpcID,
 		SubnetIDs:        network.SubnetIDs,
 		NodeCount:        input.NodeCount,
