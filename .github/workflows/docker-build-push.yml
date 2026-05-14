@@ -7,7 +7,6 @@ on:
     paths:
       - cmd/**
       - internal/**
-      - deploy/**
       - .github/workflows/docker-build-push.yml
   delete:
 
@@ -64,14 +63,14 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ github.ref_name }}
 
-      - name: Update image tag in kustomization
+      - name: Update prod image tag
         if: github.ref_name == 'main'
         run: |
-          sed -i "s/newTag:.*/newTag: ${{ github.sha }}/" deploy/base/kustomization.yaml
+          sed -i "s/newTag:.*/newTag: ${{ github.sha }}/" deploy/overlays/prod/kustomization.yaml
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add deploy/base/kustomization.yaml
-          git commit -m "chore: update image tag to ${{ github.sha }}"
+          git add deploy/overlays/prod/kustomization.yaml
+          git commit -m "chore: update prod image tag to ${{ github.sha }}"
           git pull --rebase origin main
           git push
 
