@@ -4,7 +4,7 @@ A GitOps-driven application demonstrating automated Kubernetes deployments via A
 
 ## Components
 
-### API (`cmd/main.go`)
+### API (`cmd/api/main.go`)
 A small HTTP API built with [Echo v5](https://github.com/labstack/echo), listening on `:1323`.
 
 ### Temporal Worker (`cmd/worker/`)
@@ -34,10 +34,10 @@ Workflows are composed as parent/child chains, each owning a distinct layer of i
 
 ```bash
 # Run the API locally
-go run ./cmd/main.go
+go run ./cmd/api/main.go
 
 # Build the API binary
-go build -o api ./cmd/
+go build -o api ./cmd/api/
 
 # Run tests
 go test -v ./...
@@ -51,7 +51,7 @@ docker build --target worker-release-stage -t gitops-example-worker .
 
 GitHub Actions builds and pushes Docker images to `amertz08/gitops-example` on Docker Hub. Workflows are split into reusable components under `.github/workflows/`:
 
-- **`docker-build-push-api.yml`** — triggers on changes to `cmd/main.go`
+- **`docker-build-push-api.yml`** — triggers on changes to `cmd/api/`
 - **`docker-build-push-worker.yml`** — triggers on changes to `cmd/worker/` or `internal/`
 - On push to `main`: updates the prod image tag in `deploy/overlays/prod/kustomization.yaml`
 - On push to a feature branch: registers an ArgoCD Application under `deploy/argocd/branches/`
