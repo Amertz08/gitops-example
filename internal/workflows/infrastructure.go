@@ -2,8 +2,10 @@ package workflows
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/Amertz08/gitops-example/internal/activities"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -15,6 +17,8 @@ type SpinUpInput struct {
 	NodeInstanceType string
 	Environment      string
 	Team             string
+	VpcCIDR          string
+	Subnets          []activities.SubnetConfig
 }
 
 type SpinDownInput struct {
@@ -46,6 +50,11 @@ func (i SpinUpInput) validate() error {
 	case i.NodeCount <= 0:
 		return fmt.Errorf("NodeCount must be greater than 0")
 	}
+	for idx, sc := range i.Subnets {
+		if strings.TrimSpace(sc.CIDR) == "" {
+			return fmt.Errorf("Subnets[%d].CIDR is required", idx)
+		}
+	}
 	return nil
 }
 
@@ -65,6 +74,8 @@ func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) (err error) {
 	var network SpinUpNetworkOutput
 	if err = workflow.ExecuteChildWorkflow(ctx, SpinUpNetworkWorkflow, SpinUpNetworkInput{
 		Region:      input.Region,
+		VpcCIDR:     input.VpcCIDR,
+		Subnets:     input.Subnets,
 		Environment: input.Environment,
 		Team:        input.Team,
 	}).Get(ctx, &network); err != nil {
