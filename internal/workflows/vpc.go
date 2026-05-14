@@ -26,25 +26,42 @@ func SpinUpNetworkWorkflow(ctx workflow.Context, input SpinUpNetworkInput) (Spin
 	aws := &activities.AWSActivities{}
 
 	var vpcID string
-	if err := workflow.ExecuteActivity(ctx, aws.CreateVPC, input.Region, input.Environment, input.Team).
-		Get(ctx, &vpcID); err != nil {
+	if err := workflow.ExecuteActivity(ctx, aws.CreateVPC, activities.CreateVPCInput{
+		Region:      input.Region,
+		Environment: input.Environment,
+		Team:        input.Team,
+	}).Get(ctx, &vpcID); err != nil {
 		return SpinUpNetworkOutput{}, err
 	}
 
 	var subnetIDs []string
-	if err := workflow.ExecuteActivity(ctx, aws.CreateSubnets, input.Region, vpcID, input.Environment, input.Team).
-		Get(ctx, &subnetIDs); err != nil {
+	if err := workflow.ExecuteActivity(ctx, aws.CreateSubnets, activities.CreateSubnetsInput{
+		Region:      input.Region,
+		VpcID:       vpcID,
+		Environment: input.Environment,
+		Team:        input.Team,
+	}).Get(ctx, &subnetIDs); err != nil {
 		return SpinUpNetworkOutput{}, err
 	}
 
 	var igwID string
-	if err := workflow.ExecuteActivity(ctx, aws.CreateInternetGateway, input.Region, vpcID, input.Environment, input.Team).
-		Get(ctx, &igwID); err != nil {
+	if err := workflow.ExecuteActivity(ctx, aws.CreateInternetGateway, activities.CreateInternetGatewayInput{
+		Region:      input.Region,
+		VpcID:       vpcID,
+		Environment: input.Environment,
+		Team:        input.Team,
+	}).Get(ctx, &igwID); err != nil {
 		return SpinUpNetworkOutput{}, err
 	}
 
-	if err := workflow.ExecuteActivity(ctx, aws.ConfigureRouteTables, input.Region, vpcID, igwID, subnetIDs, input.Environment, input.Team).
-		Get(ctx, nil); err != nil {
+	if err := workflow.ExecuteActivity(ctx, aws.ConfigureRouteTables, activities.ConfigureRouteTablesInput{
+		Region:      input.Region,
+		VpcID:       vpcID,
+		IgwID:       igwID,
+		SubnetIDs:   subnetIDs,
+		Environment: input.Environment,
+		Team:        input.Team,
+	}).Get(ctx, nil); err != nil {
 		return SpinUpNetworkOutput{}, err
 	}
 
@@ -55,21 +72,29 @@ func SpinDownNetworkWorkflow(ctx workflow.Context, input SpinDownNetworkInput) e
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	aws := &activities.AWSActivities{}
 
-	if err := workflow.ExecuteActivity(ctx, aws.DeleteSubnets, input.Region, input.VpcID).
-		Get(ctx, nil); err != nil {
+	if err := workflow.ExecuteActivity(ctx, aws.DeleteSubnets, activities.DeleteSubnetsInput{
+		Region: input.Region,
+		VpcID:  input.VpcID,
+	}).Get(ctx, nil); err != nil {
 		return err
 	}
 
-	if err := workflow.ExecuteActivity(ctx, aws.DeleteRouteTables, input.Region, input.VpcID).
-		Get(ctx, nil); err != nil {
+	if err := workflow.ExecuteActivity(ctx, aws.DeleteRouteTables, activities.DeleteRouteTablesInput{
+		Region: input.Region,
+		VpcID:  input.VpcID,
+	}).Get(ctx, nil); err != nil {
 		return err
 	}
 
-	if err := workflow.ExecuteActivity(ctx, aws.DetachDeleteInternetGateway, input.Region, input.VpcID).
-		Get(ctx, nil); err != nil {
+	if err := workflow.ExecuteActivity(ctx, aws.DetachDeleteInternetGateway, activities.DetachDeleteInternetGatewayInput{
+		Region: input.Region,
+		VpcID:  input.VpcID,
+	}).Get(ctx, nil); err != nil {
 		return err
 	}
 
-	return workflow.ExecuteActivity(ctx, aws.DeleteVPC, input.Region, input.VpcID).
-		Get(ctx, nil)
+	return workflow.ExecuteActivity(ctx, aws.DeleteVPC, activities.DeleteVPCInput{
+		Region: input.Region,
+		VpcID:  input.VpcID,
+	}).Get(ctx, nil)
 }
