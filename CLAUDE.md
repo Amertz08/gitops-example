@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Setup
+
+After cloning, activate the git hooks:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Requires `golines` (`go install github.com/segmentio/golines@latest`). The pre-commit hook runs golines at max line length 100 on staged Go files.
+
 ## Commands
 
 ```bash
