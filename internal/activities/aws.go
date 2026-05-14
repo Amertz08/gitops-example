@@ -323,6 +323,42 @@ func (a *AWSActivities) DeleteSubnets(ctx context.Context, region, vpcID string)
 	return nil
 }
 
+func (a *AWSActivities) DeleteRouteTables(ctx context.Context, region, vpcID string) error {
+	client, err := newEC2Client(ctx, a, region)
+	if err != nil {
+		return err
+	}
+
+	rts, err := client.DescribeRouteTables(ctx, &ec2.DescribeRouteTablesInput{
+		Filters: []ec2types.Filter{
+			{Name: aws.String("vpc-id"), Values: []string{vpcID}},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("describe route tables: %w", err)
+	}
+
+	for _, rt := range rts.RouteTables {
+		isMain := false
+		for _, assoc := range rt.Associations {
+			if aws.ToBool(assoc.Main) {
+				isMain = true
+				break
+			}
+		}
+		if isMain {
+			continue
+		}
+		if _, err = client.DeleteRouteTable(ctx, &ec2.DeleteRouteTableInput{
+			RouteTableId: rt.RouteTableId,
+		}); err != nil {
+			return fmt.Errorf("delete route table %s: %w", *rt.RouteTableId, err)
+		}
+	}
+
+	return nil
+}
+
 func (a *AWSActivities) DetachDeleteInternetGateway(
 	ctx context.Context,
 	region, vpcID string,
