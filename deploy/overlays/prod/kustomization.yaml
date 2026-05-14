@@ -10,7 +10,7 @@ images:
   - name: amertz08/gitops-example
     newTag: 58b19ea05a868cc4d9f590f4173f91038fd9441e
   - name: amertz08/gitops-example-worker
-    newTag: 351b7d6d9ffd19edd1e14e52a356b2a8f96a0c3f
+    newTag: 07e9f2c85d8c5efb10ce1d89a333a4d4ee114eb6
 
 replicas:
   - name: gitops-example
