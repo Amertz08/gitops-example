@@ -1,6 +1,7 @@
 package workflows
 
 import (
+	"fmt"
 	"time"
 
 	"go.temporal.io/sdk/temporal"
@@ -30,7 +31,29 @@ var activityOptions = workflow.ActivityOptions{
 	},
 }
 
+func (i SpinUpInput) validate() error {
+	switch {
+	case i.Region == "":
+		return fmt.Errorf("Region is required")
+	case i.ClusterName == "":
+		return fmt.Errorf("ClusterName is required")
+	case i.NodeInstanceType == "":
+		return fmt.Errorf("NodeInstanceType is required")
+	case i.Environment == "":
+		return fmt.Errorf("Environment is required")
+	case i.Team == "":
+		return fmt.Errorf("Team is required")
+	case i.NodeCount <= 0:
+		return fmt.Errorf("NodeCount must be greater than 0")
+	}
+	return nil
+}
+
 func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) error {
+	if err := input.validate(); err != nil {
+		return temporal.NewNonRetryableApplicationError(err.Error(), "InvalidInput", err)
+	}
+
 	var network SpinUpNetworkOutput
 	if err := workflow.ExecuteChildWorkflow(ctx, SpinUpNetworkWorkflow, SpinUpNetworkInput{
 		Region:      input.Region,
