@@ -1,6 +1,8 @@
 package workflows
 
 import (
+	"fmt"
+
 	"github.com/Amertz08/gitops-example/internal/activities"
 	"go.temporal.io/sdk/workflow"
 )
@@ -13,6 +15,18 @@ type SpinUpNetworkInput struct {
 	Team        string
 }
 
+func (i SpinUpNetworkInput) validate() error {
+	switch {
+	case i.Region == "":
+		return fmt.Errorf("Region is required")
+	case i.Environment == "":
+		return fmt.Errorf("Environment is required")
+	case i.Team == "":
+		return fmt.Errorf("Team is required")
+	}
+	return nil
+}
+
 type SpinUpNetworkOutput struct {
 	VpcID     string
 	SubnetIDs []string
@@ -23,10 +37,24 @@ type SpinDownNetworkInput struct {
 	VpcID  string
 }
 
+func (i SpinDownNetworkInput) validate() error {
+	switch {
+	case i.Region == "":
+		return fmt.Errorf("Region is required")
+	case i.VpcID == "":
+		return fmt.Errorf("VpcID is required")
+	}
+	return nil
+}
+
 func SpinUpNetworkWorkflow(
 	ctx workflow.Context,
 	input SpinUpNetworkInput,
 ) (output SpinUpNetworkOutput, err error) {
+	if err = invalidInput(input); err != nil {
+		return
+	}
+
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	aws := &activities.AWSActivities{}
 	logger := workflow.GetLogger(ctx)
@@ -125,6 +153,10 @@ func SpinUpNetworkWorkflow(
 }
 
 func SpinDownNetworkWorkflow(ctx workflow.Context, input SpinDownNetworkInput) error {
+	if err := invalidInput(input); err != nil {
+		return err
+	}
+
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	aws := &activities.AWSActivities{}
 	logger := workflow.GetLogger(ctx)
