@@ -36,6 +36,25 @@ func (a *AWSActivities) loadConfig(ctx context.Context, region string) (aws.Conf
 	return cfg, nil
 }
 
+func ec2TagSpec(resourceType ec2types.ResourceType, environment, team string) []ec2types.TagSpecification {
+	return []ec2types.TagSpecification{{
+		ResourceType: resourceType,
+		Tags: []ec2types.Tag{
+			{Key: aws.String("ManagedBy"), Value: aws.String("temporal")},
+			{Key: aws.String("Environment"), Value: aws.String(environment)},
+			{Key: aws.String("Team"), Value: aws.String(team)},
+		},
+	}}
+}
+
+func eksTags(environment, team string) map[string]string {
+	return map[string]string{
+		"ManagedBy":   "temporal",
+		"Environment": environment,
+		"Team":        team,
+	}
+}
+
 func newEC2Client(ctx context.Context, a *AWSActivities, region string) (*ec2.Client, error) {
 	cfg, err := a.loadConfig(ctx, region)
 	if err != nil {
@@ -52,22 +71,15 @@ func newEKSClient(ctx context.Context, a *AWSActivities, region string) (*eks.Cl
 	return eks.NewFromConfig(cfg), nil
 }
 
-func (a *AWSActivities) CreateVPC(ctx context.Context, region string) (string, error) {
+func (a *AWSActivities) CreateVPC(ctx context.Context, region, environment, team string) (string, error) {
 	client, err := newEC2Client(ctx, a, region)
 	if err != nil {
 		return "", err
 	}
 
 	out, err := client.CreateVpc(ctx, &ec2.CreateVpcInput{
-		CidrBlock: aws.String("10.0.0.0/16"),
-		TagSpecifications: []ec2types.TagSpecification{
-			{
-				ResourceType: ec2types.ResourceTypeVpc,
-				Tags: []ec2types.Tag{
-					{Key: aws.String("ManagedBy"), Value: aws.String("temporal")},
-				},
-			},
-		},
+		CidrBlock:         aws.String("10.0.0.0/16"),
+		TagSpecifications: ec2TagSpec(ec2types.ResourceTypeVpc, environment, team),
 	})
 	if err != nil {
 		return "", fmt.Errorf("create VPC: %w", err)
@@ -76,7 +88,7 @@ func (a *AWSActivities) CreateVPC(ctx context.Context, region string) (string, e
 	return *out.Vpc.VpcId, nil
 }
 
-func (a *AWSActivities) CreateSubnets(ctx context.Context, region, vpcID string) ([]string, error) {
+func (a *AWSActivities) CreateSubnets(ctx context.Context, region, vpcID, environment, team string) ([]string, error) {
 	client, err := newEC2Client(ctx, a, region)
 	if err != nil {
 		return nil, err
@@ -86,8 +98,9 @@ func (a *AWSActivities) CreateSubnets(ctx context.Context, region, vpcID string)
 	var subnetIDs []string
 	for _, cidr := range cidrs {
 		out, err := client.CreateSubnet(ctx, &ec2.CreateSubnetInput{
-			VpcId:     aws.String(vpcID),
-			CidrBlock: aws.String(cidr),
+			VpcId:             aws.String(vpcID),
+			CidrBlock:         aws.String(cidr),
+			TagSpecifications: ec2TagSpec(ec2types.ResourceTypeSubnet, environment, team),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("create subnet %s: %w", cidr, err)
@@ -98,13 +111,15 @@ func (a *AWSActivities) CreateSubnets(ctx context.Context, region, vpcID string)
 	return subnetIDs, nil
 }
 
-func (a *AWSActivities) CreateInternetGateway(ctx context.Context, region, vpcID string) error {
+func (a *AWSActivities) CreateInternetGateway(ctx context.Context, region, vpcID, environment, team string) error {
 	client, err := newEC2Client(ctx, a, region)
 	if err != nil {
 		return err
 	}
 
-	igwOut, err := client.CreateInternetGateway(ctx, &ec2.CreateInternetGatewayInput{})
+	igwOut, err := client.CreateInternetGateway(ctx, &ec2.CreateInternetGatewayInput{
+		TagSpecifications: ec2TagSpec(ec2types.ResourceTypeInternetGateway, environment, team),
+	})
 	if err != nil {
 		return fmt.Errorf("create IGW: %w", err)
 	}
@@ -120,6 +135,7 @@ func (a *AWSActivities) ConfigureRouteTables(
 	ctx context.Context,
 	region, vpcID string,
 	subnetIDs []string,
+	environment, team string,
 ) error {
 	client, err := newEC2Client(ctx, a, region)
 	if err != nil {
@@ -127,7 +143,8 @@ func (a *AWSActivities) ConfigureRouteTables(
 	}
 
 	rtOut, err := client.CreateRouteTable(ctx, &ec2.CreateRouteTableInput{
-		VpcId: aws.String(vpcID),
+		VpcId:             aws.String(vpcID),
+		TagSpecifications: ec2TagSpec(ec2types.ResourceTypeRouteTable, environment, team),
 	})
 	if err != nil {
 		return fmt.Errorf("create route table: %w", err)
@@ -168,6 +185,7 @@ func (a *AWSActivities) CreateEKSCluster(
 	ctx context.Context,
 	region, clusterName, vpcID string,
 	subnetIDs []string,
+	environment, team string,
 ) error {
 	client, err := newEKSClient(ctx, a, region)
 	if err != nil {
@@ -180,6 +198,7 @@ func (a *AWSActivities) CreateEKSCluster(
 			SubnetIds: subnetIDs,
 		},
 		RoleArn: aws.String(fmt.Sprintf("arn:aws:iam::*:role/%s-eks-role", clusterName)),
+		Tags:    eksTags(environment, team),
 	})
 	if err != nil {
 		return fmt.Errorf("create EKS cluster: %w", err)
@@ -198,7 +217,7 @@ func (a *AWSActivities) CreateNodeGroup(
 	region, clusterName string,
 	subnetIDs []string,
 	nodeCount int32,
-	instanceType string,
+	instanceType, environment, team string,
 ) error {
 	client, err := newEKSClient(ctx, a, region)
 	if err != nil {
@@ -216,6 +235,7 @@ func (a *AWSActivities) CreateNodeGroup(
 		},
 		InstanceTypes: []string{instanceType},
 		NodeRole:      aws.String(fmt.Sprintf("arn:aws:iam::*:role/%s-node-role", clusterName)),
+		Tags:          eksTags(environment, team),
 	})
 	return err
 }

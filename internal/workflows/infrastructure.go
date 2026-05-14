@@ -12,6 +12,8 @@ type SpinUpInput struct {
 	ClusterName      string
 	NodeCount        int32
 	NodeInstanceType string
+	Environment      string
+	Team             string
 }
 
 type SpinDownInput struct {
@@ -30,7 +32,9 @@ var activityOptions = workflow.ActivityOptions{
 func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) error {
 	var network SpinUpNetworkOutput
 	if err := workflow.ExecuteChildWorkflow(ctx, SpinUpNetworkWorkflow, SpinUpNetworkInput{
-		Region: input.Region,
+		Region:      input.Region,
+		Environment: input.Environment,
+		Team:        input.Team,
 	}).Get(ctx, &network); err != nil {
 		return err
 	}
@@ -42,6 +46,8 @@ func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) error {
 		SubnetIDs:        network.SubnetIDs,
 		NodeCount:        input.NodeCount,
 		NodeInstanceType: input.NodeInstanceType,
+		Environment:      input.Environment,
+		Team:             input.Team,
 	}).Get(ctx, nil)
 }
 
