@@ -75,7 +75,23 @@ func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) error {
 	}).Get(ctx, nil)
 }
 
+func (i SpinDownInput) validate() error {
+	switch {
+	case i.Region == "":
+		return fmt.Errorf("Region is required")
+	case i.ClusterName == "":
+		return fmt.Errorf("ClusterName is required")
+	case i.VpcID == "":
+		return fmt.Errorf("VpcID is required")
+	}
+	return nil
+}
+
 func SpinDownWorkflow(ctx workflow.Context, input SpinDownInput) error {
+	if err := input.validate(); err != nil {
+		return temporal.NewNonRetryableApplicationError(err.Error(), "InvalidInput", err)
+	}
+
 	if err := workflow.ExecuteChildWorkflow(ctx, SpinDownEKSWorkflow, SpinDownEKSInput{
 		Region:      input.Region,
 		ClusterName: input.ClusterName,
