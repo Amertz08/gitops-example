@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitops-example
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitops-example
+  template:
+    metadata:
+      labels:
+        app: gitops-example
+    spec:
+      securityContext:
+        runAsUser: 65532
+        runAsGroup: 65532
+        runAsNonRoot: true
+      containers:
+        - name: api
+          image: amertz08/gitops-example
+          ports:
+            - containerPort: 1323
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
