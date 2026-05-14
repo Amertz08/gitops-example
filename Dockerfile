@@ -11,7 +11,7 @@ RUN go mod download
 COPY cmd/ cmd/
 COPY internal/ internal/
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o api ./cmd/
+RUN CGO_ENABLED=0 GOOS=linux go build -o api ./cmd/api/
 RUN CGO_ENABLED=0 GOOS=linux go build -o worker ./cmd/worker/
 
 # Run the tests in the container

@@ -5,7 +5,7 @@ on:
     branches:
       - '**'
     paths:
-      - cmd/main.go
+      - cmd/api/main.go
       - .github/workflows/docker-build-push-api.yml
   delete:
 

@@ -16,10 +16,10 @@ Requires `golines` (`go install github.com/segmentio/golines@latest`). The pre-c
 
 ```bash
 # Run locally
-go run ./cmd/main.go
+go run ./cmd/api/main.go
 
 # Build binary
-go build -o api ./cmd/
+go build -o api ./cmd/api/
 
 # Run tests
 go test -v ./...
@@ -33,7 +33,7 @@ docker build -t gitops-example .
 
 ## Architecture
 
-Single Go binary (`cmd/main.go`) using the [Echo v5](https://github.com/labstack/echo) HTTP framework. The server listens on `:1323` and currently exposes one endpoint: `GET /` → `"Hello, World!"`.
+Single Go binary (`cmd/api/main.go`) using the [Echo v5](https://github.com/labstack/echo) HTTP framework. The server listens on `:1323` and currently exposes one endpoint: `GET /` → `"Hello, World!"`.
 
 The Dockerfile uses a three-stage build:
 1. **build-stage** — compiles a static Linux binary (`CGO_ENABLED=0`)
