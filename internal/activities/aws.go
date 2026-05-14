@@ -71,15 +71,15 @@ func newEKSClient(ctx context.Context, a *AWSActivities, region string) (*eks.Cl
 	return eks.NewFromConfig(cfg), nil
 }
 
-func (a *AWSActivities) CreateVPC(ctx context.Context, region, environment, team string) (string, error) {
-	client, err := newEC2Client(ctx, a, region)
+func (a *AWSActivities) CreateVPC(ctx context.Context, input CreateVPCInput) (string, error) {
+	client, err := newEC2Client(ctx, a, input.Region)
 	if err != nil {
 		return "", err
 	}
 
 	out, err := client.CreateVpc(ctx, &ec2.CreateVpcInput{
 		CidrBlock:         aws.String("10.0.0.0/16"),
-		TagSpecifications: ec2TagSpec(ec2types.ResourceTypeVpc, environment, team),
+		TagSpecifications: ec2TagSpec(ec2types.ResourceTypeVpc, input.Environment, input.Team),
 	})
 	if err != nil {
 		return "", fmt.Errorf("create VPC: %w", err)
@@ -88,8 +88,8 @@ func (a *AWSActivities) CreateVPC(ctx context.Context, region, environment, team
 	return *out.Vpc.VpcId, nil
 }
 
-func (a *AWSActivities) CreateSubnets(ctx context.Context, region, vpcID, environment, team string) ([]string, error) {
-	client, err := newEC2Client(ctx, a, region)
+func (a *AWSActivities) CreateSubnets(ctx context.Context, input CreateSubnetsInput) ([]string, error) {
+	client, err := newEC2Client(ctx, a, input.Region)
 	if err != nil {
 		return nil, err
 	}
@@ -98,9 +98,9 @@ func (a *AWSActivities) CreateSubnets(ctx context.Context, region, vpcID, enviro
 	var subnetIDs []string
 	for _, cidr := range cidrs {
 		out, err := client.CreateSubnet(ctx, &ec2.CreateSubnetInput{
-			VpcId:             aws.String(vpcID),
+			VpcId:             aws.String(input.VpcID),
 			CidrBlock:         aws.String(cidr),
-			TagSpecifications: ec2TagSpec(ec2types.ResourceTypeSubnet, environment, team),
+			TagSpecifications: ec2TagSpec(ec2types.ResourceTypeSubnet, input.Environment, input.Team),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("create subnet %s: %w", cidr, err)
@@ -111,14 +111,14 @@ func (a *AWSActivities) CreateSubnets(ctx context.Context, region, vpcID, enviro
 	return subnetIDs, nil
 }
 
-func (a *AWSActivities) CreateInternetGateway(ctx context.Context, region, vpcID, environment, team string) (string, error) {
-	client, err := newEC2Client(ctx, a, region)
+func (a *AWSActivities) CreateInternetGateway(ctx context.Context, input CreateInternetGatewayInput) (string, error) {
+	client, err := newEC2Client(ctx, a, input.Region)
 	if err != nil {
 		return "", err
 	}
 
 	igwOut, err := client.CreateInternetGateway(ctx, &ec2.CreateInternetGatewayInput{
-		TagSpecifications: ec2TagSpec(ec2types.ResourceTypeInternetGateway, environment, team),
+		TagSpecifications: ec2TagSpec(ec2types.ResourceTypeInternetGateway, input.Environment, input.Team),
 	})
 	if err != nil {
 		return "", fmt.Errorf("create IGW: %w", err)
@@ -127,7 +127,7 @@ func (a *AWSActivities) CreateInternetGateway(ctx context.Context, region, vpcID
 	igwID := igwOut.InternetGateway.InternetGatewayId
 	if _, err = client.AttachInternetGateway(ctx, &ec2.AttachInternetGatewayInput{
 		InternetGatewayId: igwID,
-		VpcId:             aws.String(vpcID),
+		VpcId:             aws.String(input.VpcID),
 	}); err != nil {
 		return "", fmt.Errorf("attach IGW: %w", err)
 	}
@@ -135,20 +135,15 @@ func (a *AWSActivities) CreateInternetGateway(ctx context.Context, region, vpcID
 	return *igwID, nil
 }
 
-func (a *AWSActivities) ConfigureRouteTables(
-	ctx context.Context,
-	region, vpcID, igwID string,
-	subnetIDs []string,
-	environment, team string,
-) error {
-	client, err := newEC2Client(ctx, a, region)
+func (a *AWSActivities) ConfigureRouteTables(ctx context.Context, input ConfigureRouteTablesInput) error {
+	client, err := newEC2Client(ctx, a, input.Region)
 	if err != nil {
 		return err
 	}
 
 	rtOut, err := client.CreateRouteTable(ctx, &ec2.CreateRouteTableInput{
-		VpcId:             aws.String(vpcID),
-		TagSpecifications: ec2TagSpec(ec2types.ResourceTypeRouteTable, environment, team),
+		VpcId:             aws.String(input.VpcID),
+		TagSpecifications: ec2TagSpec(ec2types.ResourceTypeRouteTable, input.Environment, input.Team),
 	})
 	if err != nil {
 		return fmt.Errorf("create route table: %w", err)
@@ -158,13 +153,13 @@ func (a *AWSActivities) ConfigureRouteTables(
 	_, err = client.CreateRoute(ctx, &ec2.CreateRouteInput{
 		RouteTableId:         aws.String(rtID),
 		DestinationCidrBlock: aws.String("0.0.0.0/0"),
-		GatewayId:            aws.String(igwID),
+		GatewayId:            aws.String(input.IgwID),
 	})
 	if err != nil {
 		return fmt.Errorf("create default route: %w", err)
 	}
 
-	for _, subnetID := range subnetIDs {
+	for _, subnetID := range input.SubnetIDs {
 		if _, err = client.AssociateRouteTable(ctx, &ec2.AssociateRouteTableInput{
 			RouteTableId: aws.String(rtID),
 			SubnetId:     aws.String(subnetID),
@@ -176,24 +171,19 @@ func (a *AWSActivities) ConfigureRouteTables(
 	return nil
 }
 
-func (a *AWSActivities) CreateEKSCluster(
-	ctx context.Context,
-	region, clusterName, vpcID string,
-	subnetIDs []string,
-	environment, team string,
-) error {
-	client, err := newEKSClient(ctx, a, region)
+func (a *AWSActivities) CreateEKSCluster(ctx context.Context, input CreateEKSClusterInput) error {
+	client, err := newEKSClient(ctx, a, input.Region)
 	if err != nil {
 		return err
 	}
 
 	_, err = client.CreateCluster(ctx, &eks.CreateClusterInput{
-		Name: aws.String(clusterName),
+		Name: aws.String(input.ClusterName),
 		ResourcesVpcConfig: &ekstypes.VpcConfigRequest{
-			SubnetIds: subnetIDs,
+			SubnetIds: input.SubnetIDs,
 		},
-		RoleArn: aws.String(fmt.Sprintf("arn:aws:iam::*:role/%s-eks-role", clusterName)),
-		Tags:    eksTags(environment, team),
+		RoleArn: aws.String(fmt.Sprintf("arn:aws:iam::*:role/%s-eks-role", input.ClusterName)),
+		Tags:    eksTags(input.Environment, input.Team),
 	})
 	if err != nil {
 		return fmt.Errorf("create EKS cluster: %w", err)
@@ -202,48 +192,42 @@ func (a *AWSActivities) CreateEKSCluster(
 	waiter := eks.NewClusterActiveWaiter(client)
 	return waiter.Wait(
 		ctx,
-		&eks.DescribeClusterInput{Name: aws.String(clusterName)},
+		&eks.DescribeClusterInput{Name: aws.String(input.ClusterName)},
 		30*time.Minute,
 	)
 }
 
-func (a *AWSActivities) CreateNodeGroup(
-	ctx context.Context,
-	region, clusterName string,
-	subnetIDs []string,
-	nodeCount int32,
-	instanceType, environment, team string,
-) error {
-	client, err := newEKSClient(ctx, a, region)
+func (a *AWSActivities) CreateNodeGroup(ctx context.Context, input CreateNodeGroupInput) error {
+	client, err := newEKSClient(ctx, a, input.Region)
 	if err != nil {
 		return err
 	}
 
 	_, err = client.CreateNodegroup(ctx, &eks.CreateNodegroupInput{
-		ClusterName:   aws.String(clusterName),
-		NodegroupName: aws.String(clusterName + "-nodes"),
-		Subnets:       subnetIDs,
+		ClusterName:   aws.String(input.ClusterName),
+		NodegroupName: aws.String(input.ClusterName + "-nodes"),
+		Subnets:       input.SubnetIDs,
 		ScalingConfig: &ekstypes.NodegroupScalingConfig{
-			DesiredSize: aws.Int32(nodeCount),
+			DesiredSize: aws.Int32(input.NodeCount),
 			MinSize:     aws.Int32(1),
-			MaxSize:     aws.Int32(nodeCount * 2),
+			MaxSize:     aws.Int32(input.NodeCount * 2),
 		},
-		InstanceTypes: []string{instanceType},
-		NodeRole:      aws.String(fmt.Sprintf("arn:aws:iam::*:role/%s-node-role", clusterName)),
-		Tags:          eksTags(environment, team),
+		InstanceTypes: []string{input.InstanceType},
+		NodeRole:      aws.String(fmt.Sprintf("arn:aws:iam::*:role/%s-node-role", input.ClusterName)),
+		Tags:          eksTags(input.Environment, input.Team),
 	})
 	return err
 }
 
-func (a *AWSActivities) DeleteNodeGroup(ctx context.Context, region, clusterName string) error {
-	client, err := newEKSClient(ctx, a, region)
+func (a *AWSActivities) DeleteNodeGroup(ctx context.Context, input DeleteNodeGroupInput) error {
+	client, err := newEKSClient(ctx, a, input.Region)
 	if err != nil {
 		return err
 	}
 
 	_, err = client.DeleteNodegroup(ctx, &eks.DeleteNodegroupInput{
-		ClusterName:   aws.String(clusterName),
-		NodegroupName: aws.String(clusterName + "-nodes"),
+		ClusterName:   aws.String(input.ClusterName),
+		NodegroupName: aws.String(input.ClusterName + "-nodes"),
 	})
 	if err != nil {
 		return fmt.Errorf("delete node group: %w", err)
@@ -251,18 +235,18 @@ func (a *AWSActivities) DeleteNodeGroup(ctx context.Context, region, clusterName
 
 	waiter := eks.NewNodegroupDeletedWaiter(client)
 	return waiter.Wait(ctx, &eks.DescribeNodegroupInput{
-		ClusterName:   aws.String(clusterName),
-		NodegroupName: aws.String(clusterName + "-nodes"),
+		ClusterName:   aws.String(input.ClusterName),
+		NodegroupName: aws.String(input.ClusterName + "-nodes"),
 	}, 30*time.Minute)
 }
 
-func (a *AWSActivities) DeleteEKSCluster(ctx context.Context, region, clusterName string) error {
-	client, err := newEKSClient(ctx, a, region)
+func (a *AWSActivities) DeleteEKSCluster(ctx context.Context, input DeleteEKSClusterInput) error {
+	client, err := newEKSClient(ctx, a, input.Region)
 	if err != nil {
 		return err
 	}
 
-	_, err = client.DeleteCluster(ctx, &eks.DeleteClusterInput{Name: aws.String(clusterName)})
+	_, err = client.DeleteCluster(ctx, &eks.DeleteClusterInput{Name: aws.String(input.ClusterName)})
 	if err != nil {
 		return fmt.Errorf("delete EKS cluster: %w", err)
 	}
@@ -270,20 +254,20 @@ func (a *AWSActivities) DeleteEKSCluster(ctx context.Context, region, clusterNam
 	waiter := eks.NewClusterDeletedWaiter(client)
 	return waiter.Wait(
 		ctx,
-		&eks.DescribeClusterInput{Name: aws.String(clusterName)},
+		&eks.DescribeClusterInput{Name: aws.String(input.ClusterName)},
 		30*time.Minute,
 	)
 }
 
-func (a *AWSActivities) DeleteSubnets(ctx context.Context, region, vpcID string) error {
-	client, err := newEC2Client(ctx, a, region)
+func (a *AWSActivities) DeleteSubnets(ctx context.Context, input DeleteSubnetsInput) error {
+	client, err := newEC2Client(ctx, a, input.Region)
 	if err != nil {
 		return err
 	}
 
 	subnets, err := client.DescribeSubnets(ctx, &ec2.DescribeSubnetsInput{
 		Filters: []ec2types.Filter{
-			{Name: aws.String("vpc-id"), Values: []string{vpcID}},
+			{Name: aws.String("vpc-id"), Values: []string{input.VpcID}},
 		},
 	})
 	if err != nil {
@@ -302,15 +286,15 @@ func (a *AWSActivities) DeleteSubnets(ctx context.Context, region, vpcID string)
 	return nil
 }
 
-func (a *AWSActivities) DeleteRouteTables(ctx context.Context, region, vpcID string) error {
-	client, err := newEC2Client(ctx, a, region)
+func (a *AWSActivities) DeleteRouteTables(ctx context.Context, input DeleteRouteTablesInput) error {
+	client, err := newEC2Client(ctx, a, input.Region)
 	if err != nil {
 		return err
 	}
 
 	rts, err := client.DescribeRouteTables(ctx, &ec2.DescribeRouteTablesInput{
 		Filters: []ec2types.Filter{
-			{Name: aws.String("vpc-id"), Values: []string{vpcID}},
+			{Name: aws.String("vpc-id"), Values: []string{input.VpcID}},
 		},
 	})
 	if err != nil {
@@ -338,18 +322,15 @@ func (a *AWSActivities) DeleteRouteTables(ctx context.Context, region, vpcID str
 	return nil
 }
 
-func (a *AWSActivities) DetachDeleteInternetGateway(
-	ctx context.Context,
-	region, vpcID string,
-) error {
-	client, err := newEC2Client(ctx, a, region)
+func (a *AWSActivities) DetachDeleteInternetGateway(ctx context.Context, input DetachDeleteInternetGatewayInput) error {
+	client, err := newEC2Client(ctx, a, input.Region)
 	if err != nil {
 		return err
 	}
 
 	igws, err := client.DescribeInternetGateways(ctx, &ec2.DescribeInternetGatewaysInput{
 		Filters: []ec2types.Filter{
-			{Name: aws.String("attachment.vpc-id"), Values: []string{vpcID}},
+			{Name: aws.String("attachment.vpc-id"), Values: []string{input.VpcID}},
 		},
 	})
 	if err != nil || len(igws.InternetGateways) == 0 {
@@ -359,7 +340,7 @@ func (a *AWSActivities) DetachDeleteInternetGateway(
 	igwID := igws.InternetGateways[0].InternetGatewayId
 	if _, err = client.DetachInternetGateway(ctx, &ec2.DetachInternetGatewayInput{
 		InternetGatewayId: igwID,
-		VpcId:             aws.String(vpcID),
+		VpcId:             aws.String(input.VpcID),
 	}); err != nil {
 		return fmt.Errorf("detach IGW: %w", err)
 	}
@@ -371,12 +352,12 @@ func (a *AWSActivities) DetachDeleteInternetGateway(
 	return err
 }
 
-func (a *AWSActivities) DeleteVPC(ctx context.Context, region, vpcID string) error {
-	client, err := newEC2Client(ctx, a, region)
+func (a *AWSActivities) DeleteVPC(ctx context.Context, input DeleteVPCInput) error {
+	client, err := newEC2Client(ctx, a, input.Region)
 	if err != nil {
 		return err
 	}
 
-	_, err = client.DeleteVpc(ctx, &ec2.DeleteVpcInput{VpcId: aws.String(vpcID)})
+	_, err = client.DeleteVpc(ctx, &ec2.DeleteVpcInput{VpcId: aws.String(input.VpcID)})
 	return err
 }

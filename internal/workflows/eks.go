@@ -25,24 +25,41 @@ func SpinUpEKSWorkflow(ctx workflow.Context, input SpinUpEKSInput) error {
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	aws := &activities.AWSActivities{}
 
-	if err := workflow.ExecuteActivity(ctx, aws.CreateEKSCluster, input.Region, input.ClusterName, input.VpcID, input.SubnetIDs, input.Environment, input.Team).
-		Get(ctx, nil); err != nil {
+	if err := workflow.ExecuteActivity(ctx, aws.CreateEKSCluster, activities.CreateEKSClusterInput{
+		Region:      input.Region,
+		ClusterName: input.ClusterName,
+		VpcID:       input.VpcID,
+		SubnetIDs:   input.SubnetIDs,
+		Environment: input.Environment,
+		Team:        input.Team,
+	}).Get(ctx, nil); err != nil {
 		return err
 	}
 
-	return workflow.ExecuteActivity(ctx, aws.CreateNodeGroup, input.Region, input.ClusterName, input.SubnetIDs, input.NodeCount, input.NodeInstanceType, input.Environment, input.Team).
-		Get(ctx, nil)
+	return workflow.ExecuteActivity(ctx, aws.CreateNodeGroup, activities.CreateNodeGroupInput{
+		Region:       input.Region,
+		ClusterName:  input.ClusterName,
+		SubnetIDs:    input.SubnetIDs,
+		NodeCount:    input.NodeCount,
+		InstanceType: input.NodeInstanceType,
+		Environment:  input.Environment,
+		Team:         input.Team,
+	}).Get(ctx, nil)
 }
 
 func SpinDownEKSWorkflow(ctx workflow.Context, input SpinDownEKSInput) error {
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	aws := &activities.AWSActivities{}
 
-	if err := workflow.ExecuteActivity(ctx, aws.DeleteNodeGroup, input.Region, input.ClusterName).
-		Get(ctx, nil); err != nil {
+	if err := workflow.ExecuteActivity(ctx, aws.DeleteNodeGroup, activities.DeleteNodeGroupInput{
+		Region:      input.Region,
+		ClusterName: input.ClusterName,
+	}).Get(ctx, nil); err != nil {
 		return err
 	}
 
-	return workflow.ExecuteActivity(ctx, aws.DeleteEKSCluster, input.Region, input.ClusterName).
-		Get(ctx, nil)
+	return workflow.ExecuteActivity(ctx, aws.DeleteEKSCluster, activities.DeleteEKSClusterInput{
+		Region:      input.Region,
+		ClusterName: input.ClusterName,
+	}).Get(ctx, nil)
 }

@@ -1,0 +1,79 @@
+package activities
+
+type CreateVPCInput struct {
+	Region      string
+	Environment string
+	Team        string
+}
+
+type CreateSubnetsInput struct {
+	Region      string
+	VpcID       string
+	Environment string
+	Team        string
+}
+
+type CreateInternetGatewayInput struct {
+	Region      string
+	VpcID       string
+	Environment string
+	Team        string
+}
+
+type ConfigureRouteTablesInput struct {
+	Region      string
+	VpcID       string
+	IgwID       string
+	SubnetIDs   []string
+	Environment string
+	Team        string
+}
+
+type CreateEKSClusterInput struct {
+	Region      string
+	ClusterName string
+	VpcID       string
+	SubnetIDs   []string
+	Environment string
+	Team        string
+}
+
+type CreateNodeGroupInput struct {
+	Region       string
+	ClusterName  string
+	SubnetIDs    []string
+	NodeCount    int32
+	InstanceType string
+	Environment  string
+	Team         string
+}
+
+type DeleteNodeGroupInput struct {
+	Region      string
+	ClusterName string
+}
+
+type DeleteEKSClusterInput struct {
+	Region      string
+	ClusterName string
+}
+
+type DeleteSubnetsInput struct {
+	Region string
+	VpcID  string
+}
+
+type DeleteRouteTablesInput struct {
+	Region string
+	VpcID  string
+}
+
+type DetachDeleteInternetGatewayInput struct {
+	Region string
+	VpcID  string
+}
+
+type DeleteVPCInput struct {
+	Region string
+	VpcID  string
+}
