@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/eks"
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"go.temporal.io/sdk/activity"
 )
 
 type AWSActivities struct {
@@ -72,6 +73,23 @@ func newEKSClient(ctx context.Context, a *AWSActivities, region string) (*eks.Cl
 		return nil, err
 	}
 	return eks.NewFromConfig(cfg), nil
+}
+
+// heartbeatWhileWaiting runs wait in a goroutine and records a heartbeat every
+// 10 s so Temporal can detect stalls and propagate cancellations.
+func heartbeatWhileWaiting(ctx context.Context, wait func() error) error {
+	done := make(chan error, 1)
+	go func() { done <- wait() }()
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case err := <-done:
+			return err
+		case <-ticker.C:
+			activity.RecordHeartbeat(ctx, nil)
+		}
+	}
 }
 
 func (a *AWSActivities) CreateVPC(ctx context.Context, input CreateVPCInput) (string, error) {
@@ -253,11 +271,13 @@ func (a *AWSActivities) CreateEKSCluster(ctx context.Context, input CreateEKSClu
 	}
 
 	waiter := eks.NewClusterActiveWaiter(client)
-	return waiter.Wait(
-		ctx,
-		&eks.DescribeClusterInput{Name: aws.String(input.ClusterName)},
-		30*time.Minute,
-	)
+	return heartbeatWhileWaiting(ctx, func() error {
+		return waiter.Wait(
+			ctx,
+			&eks.DescribeClusterInput{Name: aws.String(input.ClusterName)},
+			30*time.Minute,
+		)
+	})
 }
 
 func (a *AWSActivities) CreateNodeGroup(ctx context.Context, input CreateNodeGroupInput) error {
@@ -299,10 +319,12 @@ func (a *AWSActivities) DeleteNodeGroup(ctx context.Context, input DeleteNodeGro
 	}
 
 	waiter := eks.NewNodegroupDeletedWaiter(client)
-	return waiter.Wait(ctx, &eks.DescribeNodegroupInput{
-		ClusterName:   aws.String(input.ClusterName),
-		NodegroupName: aws.String(input.ClusterName + "-nodes"),
-	}, 30*time.Minute)
+	return heartbeatWhileWaiting(ctx, func() error {
+		return waiter.Wait(ctx, &eks.DescribeNodegroupInput{
+			ClusterName:   aws.String(input.ClusterName),
+			NodegroupName: aws.String(input.ClusterName + "-nodes"),
+		}, 30*time.Minute)
+	})
 }
 
 func (a *AWSActivities) DeleteEKSCluster(ctx context.Context, input DeleteEKSClusterInput) error {
@@ -317,11 +339,13 @@ func (a *AWSActivities) DeleteEKSCluster(ctx context.Context, input DeleteEKSClu
 	}
 
 	waiter := eks.NewClusterDeletedWaiter(client)
-	return waiter.Wait(
-		ctx,
-		&eks.DescribeClusterInput{Name: aws.String(input.ClusterName)},
-		30*time.Minute,
-	)
+	return heartbeatWhileWaiting(ctx, func() error {
+		return waiter.Wait(
+			ctx,
+			&eks.DescribeClusterInput{Name: aws.String(input.ClusterName)},
+			30*time.Minute,
+		)
+	})
 }
 
 func (a *AWSActivities) DeleteSubnets(ctx context.Context, input DeleteSubnetsInput) error {
