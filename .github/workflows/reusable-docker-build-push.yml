@@ -1,0 +1,79 @@
+name: Reusable - Docker Build and Push
+
+on:
+  workflow_call:
+    inputs:
+      image_suffix:
+        description: Appended to the base image name (e.g. "-worker")
+        type: string
+        default: ""
+      dockerfile_target:
+        description: Docker build --target stage (empty = no target)
+        type: string
+        default: ""
+      image_title_suffix:
+        description: Appended to the OCI image.title label
+        type: string
+        default: ""
+      image_description:
+        description: OCI image.description label value
+        type: string
+        required: true
+    secrets:
+      REGISTRY_USERNAME:
+        required: true
+      REGISTRY_PASSWORD:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set lowercase image name
+        run: echo "IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Set image tags
+        run: |
+          BRANCH=$(echo "${{ github.ref_name }}" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "TAGS=docker.io/${{ env.IMAGE_NAME }}${{ inputs.image_suffix }}:${{ github.sha }},docker.io/${{ env.IMAGE_NAME }}${{ inputs.image_suffix }}:latest" >> $GITHUB_ENV
+          else
+            echo "TAGS=docker.io/${{ env.IMAGE_NAME }}${{ inputs.image_suffix }}:${{ github.sha }},docker.io/${{ env.IMAGE_NAME }}${{ inputs.image_suffix }}:${BRANCH}-latest" >> $GITHUB_ENV
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          target: ${{ inputs.dockerfile_target }}
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ env.TAGS }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.title=${{ github.repository }}${{ inputs.image_title_suffix }}
+            org.opencontainers.image.description=${{ inputs.image_description }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.url=https://github.com/${{ github.repository }}
+            org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/main/README.md
+            org.opencontainers.image.vendor=amertz08
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.created=${{ github.event.created_at }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}

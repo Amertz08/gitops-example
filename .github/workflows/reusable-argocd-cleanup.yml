@@ -1,0 +1,29 @@
+name: Reusable - Cleanup Branch ArgoCD App
+
+on:
+  workflow_call:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Remove branch ArgoCD application
+        run: |
+          BRANCH="${{ github.event.ref }}"
+          SAFE_BRANCH=$(echo "${BRANCH}" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+          if [ -f "deploy/argocd/branches/${SAFE_BRANCH}.yaml" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git rm deploy/argocd/branches/${SAFE_BRANCH}.yaml
+            git commit -m "chore: remove ArgoCD app for deleted branch ${BRANCH}"
+            git pull --rebase origin main
+            git push origin main
+          fi

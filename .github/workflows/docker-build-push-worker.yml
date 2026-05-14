@@ -14,57 +14,19 @@ permissions:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    uses: ./.github/workflows/reusable-docker-build-push.yml
+    with:
+      image_suffix: "-worker"
+      dockerfile_target: worker-release-stage
+      image_title_suffix: "-worker"
+      image_description: GitOps Example Temporal Worker
+    secrets: inherit
 
-      - name: Set lowercase image name
-        run: echo "IMAGE_NAME=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-
-      - name: Set image tags
-        run: |
-          BRANCH=$(echo "${{ github.ref_name }}" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "TAGS=docker.io/${{ env.IMAGE_NAME }}-worker:${{ github.sha }},docker.io/${{ env.IMAGE_NAME }}-worker:latest" >> $GITHUB_ENV
-          else
-            echo "TAGS=docker.io/${{ env.IMAGE_NAME }}-worker:${{ github.sha }},docker.io/${{ env.IMAGE_NAME }}-worker:${BRANCH}-latest" >> $GITHUB_ENV
-          fi
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
-
-      - name: Build and push worker
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          target: worker-release-stage
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ env.TAGS }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          labels: |
-            org.opencontainers.image.title=${{ github.repository }}-worker
-            org.opencontainers.image.description=GitOps Example Temporal Worker
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.url=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ github.ref_name }}
-
-      - name: Update prod worker image tag
-        if: github.ref_name == 'main'
-        run: |
-          sed -i '/name: amertz08\/gitops-example-worker/{n; s/newTag:.*/newTag: ${{ github.sha }}/}' deploy/overlays/prod/kustomization.yaml
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add deploy/overlays/prod/kustomization.yaml
-          git commit -m "chore: update prod worker image tag to ${{ github.sha }}"
-          git pull --rebase origin main
-          git push
+  update-prod-tag:
+    if: github.ref_name == 'main'
+    needs: build-and-push
+    uses: ./.github/workflows/reusable-update-prod-tag.yml
+    with:
+      image_name_pattern: amertz08\/gitops-example-worker
+      commit_message_label: worker
+    secrets: inherit
