@@ -59,6 +59,11 @@ func SpinDownNetworkWorkflow(ctx workflow.Context, input SpinDownNetworkInput) e
 		return err
 	}
 
+	if err := workflow.ExecuteActivity(ctx, aws.DeleteRouteTables, input.Region, input.VpcID).
+		Get(ctx, nil); err != nil {
+		return err
+	}
+
 	if err := workflow.ExecuteActivity(ctx, aws.DetachDeleteInternetGateway, input.Region, input.VpcID).
 		Get(ctx, nil); err != nil {
 		return err
