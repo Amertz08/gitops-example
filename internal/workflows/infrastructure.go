@@ -19,6 +19,7 @@ type SpinUpInput struct {
 type SpinDownInput struct {
 	Region      string
 	ClusterName string
+	VpcID       string
 }
 
 var activityOptions = workflow.ActivityOptions{
@@ -52,16 +53,15 @@ func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) error {
 }
 
 func SpinDownWorkflow(ctx workflow.Context, input SpinDownInput) error {
-	var vpcID string
 	if err := workflow.ExecuteChildWorkflow(ctx, SpinDownEKSWorkflow, SpinDownEKSInput{
 		Region:      input.Region,
 		ClusterName: input.ClusterName,
-	}).Get(ctx, &vpcID); err != nil {
+	}).Get(ctx, nil); err != nil {
 		return err
 	}
 
 	return workflow.ExecuteChildWorkflow(ctx, SpinDownNetworkWorkflow, SpinDownNetworkInput{
 		Region: input.Region,
-		VpcID:  vpcID,
+		VpcID:  input.VpcID,
 	}).Get(ctx, nil)
 }
