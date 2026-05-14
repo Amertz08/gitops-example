@@ -21,11 +21,6 @@ type SpinUpEKSInput struct {
 	Team             string
 }
 
-type SpinDownEKSInput struct {
-	Region      string
-	ClusterName string
-}
-
 func (i SpinUpEKSInput) validate() error {
 	switch {
 	case i.Region == "":
@@ -50,6 +45,11 @@ func (i SpinUpEKSInput) validate() error {
 		return fmt.Errorf("NodeCount must be greater than 0")
 	}
 	return nil
+}
+
+type SpinDownEKSInput struct {
+	Region      string
+	ClusterName string
 }
 
 func (i SpinDownEKSInput) validate() error {
