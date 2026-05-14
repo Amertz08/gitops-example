@@ -12,6 +12,8 @@ import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"go.temporal.io/sdk/activity"
 )
@@ -460,4 +462,84 @@ func (a *AWSActivities) DeleteVPC(ctx context.Context, input DeleteVPCInput) err
 
 	_, err = client.DeleteVpc(ctx, &ec2.DeleteVpcInput{VpcId: aws.String(input.VpcID)})
 	return err
+}
+
+func newIAMClient(ctx context.Context, a *AWSActivities) (*iam.Client, error) {
+	cfg, err := a.loadConfig(ctx, "us-east-1") // IAM is global; region is only used for auth
+	if err != nil {
+		return nil, err
+	}
+	return iam.NewFromConfig(cfg), nil
+}
+
+func (a *AWSActivities) CreateIAMRole(
+	ctx context.Context,
+	input CreateIAMRoleInput,
+) (string, error) {
+	client, err := newIAMClient(ctx, a)
+	if err != nil {
+		return "", err
+	}
+
+	out, err := client.CreateRole(ctx, &iam.CreateRoleInput{
+		RoleName:                 aws.String(input.RoleName),
+		AssumeRolePolicyDocument: aws.String(input.TrustPolicy),
+		Description:              aws.String(input.Description),
+		Tags: []iamtypes.Tag{
+			{Key: aws.String("ManagedBy"), Value: aws.String("temporal")},
+			{Key: aws.String("Environment"), Value: aws.String(input.Environment)},
+			{Key: aws.String("Team"), Value: aws.String(input.Team)},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("create IAM role %s: %w", input.RoleName, err)
+	}
+
+	for _, policyARN := range input.PolicyARNs {
+		if _, err = client.AttachRolePolicy(ctx, &iam.AttachRolePolicyInput{
+			RoleName:  aws.String(input.RoleName),
+			PolicyArn: aws.String(policyARN),
+		}); err != nil {
+			return "", fmt.Errorf("attach policy %s to role %s: %w", policyARN, input.RoleName, err)
+		}
+	}
+
+	return *out.Role.Arn, nil
+}
+
+func (a *AWSActivities) DeleteIAMRole(ctx context.Context, input DeleteIAMRoleInput) error {
+	client, err := newIAMClient(ctx, a)
+	if err != nil {
+		return err
+	}
+
+	policies, err := client.ListAttachedRolePolicies(
+		ctx,
+		&iam.ListAttachedRolePoliciesInput{RoleName: aws.String(input.RoleName)},
+	)
+	if err != nil {
+		return fmt.Errorf("list attached policies for role %s: %w", input.RoleName, err)
+	}
+
+	for _, p := range policies.AttachedPolicies {
+		if _, err = client.DetachRolePolicy(ctx, &iam.DetachRolePolicyInput{
+			RoleName:  aws.String(input.RoleName),
+			PolicyArn: p.PolicyArn,
+		}); err != nil {
+			return fmt.Errorf(
+				"detach policy %s from role %s: %w",
+				*p.PolicyArn,
+				input.RoleName,
+				err,
+			)
+		}
+	}
+
+	if _, err = client.DeleteRole(ctx, &iam.DeleteRoleInput{
+		RoleName: aws.String(input.RoleName),
+	}); err != nil {
+		return fmt.Errorf("delete IAM role %s: %w", input.RoleName, err)
+	}
+
+	return nil
 }

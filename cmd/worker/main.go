@@ -35,9 +35,11 @@ func main() {
 	w := worker.New(c, taskQueue, worker.Options{})
 
 	w.RegisterWorkflow(workflows.SpinUpWorkflow)
+	w.RegisterWorkflow(workflows.SpinUpIAMWorkflow)
 	w.RegisterWorkflow(workflows.SpinUpNetworkWorkflow)
 	w.RegisterWorkflow(workflows.SpinUpEKSWorkflow)
 	w.RegisterWorkflow(workflows.SpinDownWorkflow)
+	w.RegisterWorkflow(workflows.SpinDownIAMWorkflow)
 	w.RegisterWorkflow(workflows.SpinDownEKSWorkflow)
 	w.RegisterWorkflow(workflows.SpinDownNetworkWorkflow)
 	w.RegisterActivity(activities.NewAWSActivities(os.Getenv("AWS_ROLE_ARN")))
