@@ -12,5 +12,5 @@ images:
 configMapGenerator:
   - name: gitops-example-config
     literals:
-      - LOG_LEVEL=info
+      - LOG_LEVEL=debug
       - PORT=1323
