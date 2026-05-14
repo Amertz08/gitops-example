@@ -24,41 +24,74 @@ type SpinDownNetworkInput struct {
 func SpinUpNetworkWorkflow(
 	ctx workflow.Context,
 	input SpinUpNetworkInput,
-) (SpinUpNetworkOutput, error) {
+) (output SpinUpNetworkOutput, err error) {
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	aws := &activities.AWSActivities{}
+	logger := workflow.GetLogger(ctx)
+
+	var s Saga
+	defer func() {
+		if err != nil {
+			s.Compensate(ctx)
+		}
+	}()
 
 	var vpcID string
-	if err := workflow.ExecuteActivity(ctx, aws.CreateVPC, activities.CreateVPCInput{
+	if err = workflow.ExecuteActivity(ctx, aws.CreateVPC, activities.CreateVPCInput{
 		Region:      input.Region,
 		Environment: input.Environment,
 		Team:        input.Team,
 	}).Get(ctx, &vpcID); err != nil {
-		return SpinUpNetworkOutput{}, err
+		return
 	}
+	s.AddCompensation(func(cctx workflow.Context) {
+		if err := workflow.ExecuteActivity(cctx, aws.DeleteVPC, activities.DeleteVPCInput{
+			Region: input.Region,
+			VpcID:  vpcID,
+		}).Get(cctx, nil); err != nil {
+			logger.Error("saga: failed to delete VPC", "vpcID", vpcID, "error", err)
+		}
+	})
 
 	var subnetIDs []string
-	if err := workflow.ExecuteActivity(ctx, aws.CreateSubnets, activities.CreateSubnetsInput{
+	if err = workflow.ExecuteActivity(ctx, aws.CreateSubnets, activities.CreateSubnetsInput{
 		Region:      input.Region,
 		VpcID:       vpcID,
 		Environment: input.Environment,
 		Team:        input.Team,
 	}).Get(ctx, &subnetIDs); err != nil {
-		return SpinUpNetworkOutput{}, err
+		return
 	}
+	s.AddCompensation(func(cctx workflow.Context) {
+		if err := workflow.ExecuteActivity(cctx, aws.DeleteSubnets, activities.DeleteSubnetsInput{
+			Region: input.Region,
+			VpcID:  vpcID,
+		}).Get(cctx, nil); err != nil {
+			logger.Error("saga: failed to delete subnets", "vpcID", vpcID, "error", err)
+		}
+	})
 
 	var igwID string
-	if err := workflow.ExecuteActivity(ctx, aws.CreateInternetGateway, activities.CreateInternetGatewayInput{
+	if err = workflow.ExecuteActivity(ctx, aws.CreateInternetGateway, activities.CreateInternetGatewayInput{
 		Region:      input.Region,
 		VpcID:       vpcID,
 		Environment: input.Environment,
 		Team:        input.Team,
 	}).
 		Get(ctx, &igwID); err != nil {
-		return SpinUpNetworkOutput{}, err
+		return
 	}
+	s.AddCompensation(func(cctx workflow.Context) {
+		if err := workflow.ExecuteActivity(cctx, aws.DetachDeleteInternetGateway, activities.DetachDeleteInternetGatewayInput{
+			Region: input.Region,
+			VpcID:  vpcID,
+		}).
+			Get(cctx, nil); err != nil {
+			logger.Error("saga: failed to detach/delete IGW", "vpcID", vpcID, "error", err)
+		}
+	})
 
-	if err := workflow.ExecuteActivity(ctx, aws.ConfigureRouteTables, activities.ConfigureRouteTablesInput{
+	if err = workflow.ExecuteActivity(ctx, aws.ConfigureRouteTables, activities.ConfigureRouteTablesInput{
 		Region:      input.Region,
 		VpcID:       vpcID,
 		IgwID:       igwID,
@@ -67,10 +100,20 @@ func SpinUpNetworkWorkflow(
 		Team:        input.Team,
 	}).
 		Get(ctx, nil); err != nil {
-		return SpinUpNetworkOutput{}, err
+		return
 	}
+	s.AddCompensation(func(cctx workflow.Context) {
+		if err := workflow.ExecuteActivity(cctx, aws.DeleteRouteTables, activities.DeleteRouteTablesInput{
+			Region: input.Region,
+			VpcID:  vpcID,
+		}).
+			Get(cctx, nil); err != nil {
+			logger.Error("saga: failed to delete route tables", "vpcID", vpcID, "error", err)
+		}
+	})
 
-	return SpinUpNetworkOutput{VpcID: vpcID, SubnetIDs: subnetIDs}, nil
+	output = SpinUpNetworkOutput{VpcID: vpcID, SubnetIDs: subnetIDs}
+	return
 }
 
 func SpinDownNetworkWorkflow(ctx workflow.Context, input SpinDownNetworkInput) error {
