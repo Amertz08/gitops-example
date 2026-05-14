@@ -12,6 +12,8 @@ type SpinUpEKSInput struct {
 	SubnetIDs        []string
 	NodeCount        int32
 	NodeInstanceType string
+	Environment      string
+	Team             string
 }
 
 type SpinDownEKSInput struct {
@@ -23,12 +25,12 @@ func SpinUpEKSWorkflow(ctx workflow.Context, input SpinUpEKSInput) error {
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 	aws := &activities.AWSActivities{}
 
-	if err := workflow.ExecuteActivity(ctx, aws.CreateEKSCluster, input.Region, input.ClusterName, input.VpcID, input.SubnetIDs).
+	if err := workflow.ExecuteActivity(ctx, aws.CreateEKSCluster, input.Region, input.ClusterName, input.VpcID, input.SubnetIDs, input.Environment, input.Team).
 		Get(ctx, nil); err != nil {
 		return err
 	}
 
-	return workflow.ExecuteActivity(ctx, aws.CreateNodeGroup, input.Region, input.ClusterName, input.SubnetIDs, input.NodeCount, input.NodeInstanceType).
+	return workflow.ExecuteActivity(ctx, aws.CreateNodeGroup, input.Region, input.ClusterName, input.SubnetIDs, input.NodeCount, input.NodeInstanceType, input.Environment, input.Team).
 		Get(ctx, nil)
 }
 

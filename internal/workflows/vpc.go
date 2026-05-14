@@ -6,7 +6,9 @@ import (
 )
 
 type SpinUpNetworkInput struct {
-	Region string
+	Region      string
+	Environment string
+	Team        string
 }
 
 type SpinUpNetworkOutput struct {
@@ -24,23 +26,23 @@ func SpinUpNetworkWorkflow(ctx workflow.Context, input SpinUpNetworkInput) (Spin
 	aws := &activities.AWSActivities{}
 
 	var vpcID string
-	if err := workflow.ExecuteActivity(ctx, aws.CreateVPC, input.Region).
+	if err := workflow.ExecuteActivity(ctx, aws.CreateVPC, input.Region, input.Environment, input.Team).
 		Get(ctx, &vpcID); err != nil {
 		return SpinUpNetworkOutput{}, err
 	}
 
 	var subnetIDs []string
-	if err := workflow.ExecuteActivity(ctx, aws.CreateSubnets, input.Region, vpcID).
+	if err := workflow.ExecuteActivity(ctx, aws.CreateSubnets, input.Region, vpcID, input.Environment, input.Team).
 		Get(ctx, &subnetIDs); err != nil {
 		return SpinUpNetworkOutput{}, err
 	}
 
-	if err := workflow.ExecuteActivity(ctx, aws.CreateInternetGateway, input.Region, vpcID).
+	if err := workflow.ExecuteActivity(ctx, aws.CreateInternetGateway, input.Region, vpcID, input.Environment, input.Team).
 		Get(ctx, nil); err != nil {
 		return SpinUpNetworkOutput{}, err
 	}
 
-	if err := workflow.ExecuteActivity(ctx, aws.ConfigureRouteTables, input.Region, vpcID, subnetIDs).
+	if err := workflow.ExecuteActivity(ctx, aws.ConfigureRouteTables, input.Region, vpcID, subnetIDs, input.Environment, input.Team).
 		Get(ctx, nil); err != nil {
 		return SpinUpNetworkOutput{}, err
 	}
