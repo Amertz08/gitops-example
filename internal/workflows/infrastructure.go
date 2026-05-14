@@ -37,6 +37,8 @@ func (i SpinUpInput) validate() error {
 		return fmt.Errorf("Team is required")
 	case i.NodeCount <= 0:
 		return fmt.Errorf("NodeCount must be greater than 0")
+	case (i.ClusterRoleARN == "") != (i.NodeRoleARN == ""):
+		return fmt.Errorf("ClusterRoleARN and NodeRoleARN must both be provided or both be empty")
 	}
 	for idx, sc := range i.Subnets {
 		if strings.TrimSpace(sc.CIDR) == "" {
@@ -90,9 +92,9 @@ func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) (err error) {
 	clusterRoleARN := input.ClusterRoleARN
 	nodeRoleARN := input.NodeRoleARN
 
-	if clusterRoleARN == "" || nodeRoleARN == "" {
-		var iamOut SpinUpIAMOutput
-		if err = workflow.ExecuteChildWorkflow(ctx, SpinUpIAMWorkflow, SpinUpIAMInput{
+	if clusterRoleARN == "" {
+		var iamOut SpinUpEKSIAMOutput
+		if err = workflow.ExecuteChildWorkflow(ctx, SpinUpIAMWorkflow, SpinUpEKSIAMInput{
 			Region:      input.Region,
 			ClusterName: input.ClusterName,
 			Environment: input.Environment,
@@ -111,7 +113,7 @@ func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) (err error) {
 			if err := workflow.ExecuteChildWorkflow(
 				cctx,
 				SpinDownIAMWorkflow,
-				SpinDownIAMInput{
+				SpinDownEKSIAMInput{
 					ClusterRoleName: iamOut.ClusterRoleName,
 					NodeRoleName:    iamOut.NodeRoleName,
 				},
@@ -185,7 +187,7 @@ func SpinDownWorkflow(ctx workflow.Context, input SpinDownInput) error {
 	logger.Info("network torn down", "vpcID", input.VpcID)
 
 	if input.ClusterRoleName != "" || input.NodeRoleName != "" {
-		if err := workflow.ExecuteChildWorkflow(ctx, SpinDownIAMWorkflow, SpinDownIAMInput{
+		if err := workflow.ExecuteChildWorkflow(ctx, SpinDownIAMWorkflow, SpinDownEKSIAMInput{
 			ClusterRoleName: input.ClusterRoleName,
 			NodeRoleName:    input.NodeRoleName,
 		}).Get(ctx, nil); err != nil {
