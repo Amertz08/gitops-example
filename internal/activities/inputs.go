@@ -87,3 +87,16 @@ type DeleteVPCInput struct {
 	Region string
 	VpcID  string
 }
+
+type CreateIAMRoleInput struct {
+	RoleName    string
+	Description string
+	TrustPolicy string
+	PolicyARNs  []string
+	Environment string
+	Team        string
+}
+
+type DeleteIAMRoleInput struct {
+	RoleName string
+}

@@ -24,9 +24,11 @@ type SpinUpInput struct {
 }
 
 type SpinDownInput struct {
-	Region      string
-	ClusterName string
-	VpcID       string
+	Region          string
+	ClusterName     string
+	VpcID           string
+	ClusterRoleName string
+	NodeRoleName    string
 }
 
 var activityOptions = workflow.ActivityOptions{
@@ -49,10 +51,6 @@ func (i SpinUpInput) validate() error {
 		return fmt.Errorf("Environment is required")
 	case i.Team == "":
 		return fmt.Errorf("Team is required")
-	case i.ClusterRoleARN == "":
-		return fmt.Errorf("ClusterRoleARN is required")
-	case i.NodeRoleARN == "":
-		return fmt.Errorf("NodeRoleARN is required")
 	case i.NodeCount <= 0:
 		return fmt.Errorf("NodeCount must be greater than 0")
 	}
@@ -77,6 +75,42 @@ func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) (err error) {
 		}
 	}()
 
+	clusterRoleARN := input.ClusterRoleARN
+	nodeRoleARN := input.NodeRoleARN
+
+	if clusterRoleARN == "" || nodeRoleARN == "" {
+		var iamOut SpinUpIAMOutput
+		if err = workflow.ExecuteChildWorkflow(ctx, SpinUpIAMWorkflow, SpinUpIAMInput{
+			Region:      input.Region,
+			ClusterName: input.ClusterName,
+			Environment: input.Environment,
+			Team:        input.Team,
+		}).Get(ctx, &iamOut); err != nil {
+			return
+		}
+		logger.Info(
+			"IAM roles created",
+			"clusterRole",
+			iamOut.ClusterRoleName,
+			"nodeRole",
+			iamOut.NodeRoleName,
+		)
+		s.AddCompensation(func(cctx workflow.Context) {
+			if err := workflow.ExecuteChildWorkflow(
+				cctx,
+				SpinDownIAMWorkflow,
+				SpinDownIAMInput{
+					ClusterRoleName: iamOut.ClusterRoleName,
+					NodeRoleName:    iamOut.NodeRoleName,
+				},
+			).Get(cctx, nil); err != nil {
+				logger.Error("saga: failed to spin down IAM roles", "error", err)
+			}
+		})
+		clusterRoleARN = iamOut.ClusterRoleARN
+		nodeRoleARN = iamOut.NodeRoleARN
+	}
+
 	var network SpinUpNetworkOutput
 	if err = workflow.ExecuteChildWorkflow(ctx, SpinUpNetworkWorkflow, SpinUpNetworkInput{
 		Region:      input.Region,
@@ -100,8 +134,8 @@ func SpinUpWorkflow(ctx workflow.Context, input SpinUpInput) (err error) {
 	if err = workflow.ExecuteChildWorkflow(ctx, SpinUpEKSWorkflow, SpinUpEKSInput{
 		Region:           input.Region,
 		ClusterName:      input.ClusterName,
-		ClusterRoleARN:   input.ClusterRoleARN,
-		NodeRoleARN:      input.NodeRoleARN,
+		ClusterRoleARN:   clusterRoleARN,
+		NodeRoleARN:      nodeRoleARN,
 		VpcID:            network.VpcID,
 		SubnetIDs:        network.SubnetIDs,
 		NodeCount:        input.NodeCount,
@@ -148,6 +182,18 @@ func SpinDownWorkflow(ctx workflow.Context, input SpinDownInput) error {
 	}).Get(ctx, nil); err != nil {
 		return err
 	}
+	logger.Info("network torn down", "vpcID", input.VpcID)
+
+	if input.ClusterRoleName != "" || input.NodeRoleName != "" {
+		if err := workflow.ExecuteChildWorkflow(ctx, SpinDownIAMWorkflow, SpinDownIAMInput{
+			ClusterRoleName: input.ClusterRoleName,
+			NodeRoleName:    input.NodeRoleName,
+		}).Get(ctx, nil); err != nil {
+			return err
+		}
+		logger.Info("IAM roles deleted")
+	}
+
 	logger.Info("spin down complete", "clusterName", input.ClusterName, "vpcID", input.VpcID)
 	return nil
 }
