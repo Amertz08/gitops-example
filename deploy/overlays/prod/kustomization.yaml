@@ -8,7 +8,7 @@ resources:
 
 images:
   - name: amertz08/gitops-example
-    newTag: 58b19ea05a868cc4d9f590f4173f91038fd9441e
+    newTag: 8c059f7e6475833e1ad7347551c2ad89e165d918
   - name: amertz08/gitops-example-worker
     newTag: 25df030b517d46bf8609eff70cee3555ad9f00cd
 
