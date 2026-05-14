@@ -32,7 +32,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ github.repository }}:${{ github.sha }},${{ github.repository }}:latest
+          tags: docker.io/${{ github.repository }}:${{ github.sha }},docker.io/${{ github.repository }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
           labels: |
