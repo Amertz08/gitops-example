@@ -7,6 +7,7 @@ on:
     paths:
       - cmd/**
       - internal/**
+      - .github/workflows/docker-build-push.yml
 
 permissions:
   contents: read
