@@ -1,13 +1,12 @@
-name: Build and Push Docker Image
+name: Build and Push API Image
 
 on:
   push:
     branches:
       - '**'
     paths:
-      - cmd/**
-      - internal/**
-      - .github/workflows/docker-build-push.yml
+      - cmd/main.go
+      - .github/workflows/docker-build-push-api.yml
   delete:
 
 permissions:
@@ -29,10 +28,8 @@ jobs:
           BRANCH=$(echo "${{ github.ref_name }}" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
           if [ "${{ github.ref_name }}" = "main" ]; then
             echo "TAGS=docker.io/${{ env.IMAGE_NAME }}:${{ github.sha }},docker.io/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_ENV
-            echo "WORKER_TAGS=docker.io/${{ env.IMAGE_NAME }}-worker:${{ github.sha }},docker.io/${{ env.IMAGE_NAME }}-worker:latest" >> $GITHUB_ENV
           else
             echo "TAGS=docker.io/${{ env.IMAGE_NAME }}:${{ github.sha }},docker.io/${{ env.IMAGE_NAME }}:${BRANCH}-latest" >> $GITHUB_ENV
-            echo "WORKER_TAGS=docker.io/${{ env.IMAGE_NAME }}-worker:${{ github.sha }},docker.io/${{ env.IMAGE_NAME }}-worker:${BRANCH}-latest" >> $GITHUB_ENV
           fi
 
       - name: Set up Docker Buildx
@@ -65,31 +62,14 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ github.ref_name }}
 
-      - name: Build and push worker
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          target: worker-release-stage
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ env.WORKER_TAGS }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          labels: |
-            org.opencontainers.image.title=${{ github.repository }}-worker
-            org.opencontainers.image.description=GitOps Example Temporal Worker
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ github.ref_name }}
-
-      - name: Update prod image tag
+      - name: Update prod API image tag
         if: github.ref_name == 'main'
         run: |
-          sed -i "s/newTag:.*/newTag: ${{ github.sha }}/" deploy/overlays/prod/kustomization.yaml
+          sed -i '/name: amertz08\/gitops-example$/{n; s/newTag:.*/newTag: ${{ github.sha }}/}' deploy/overlays/prod/kustomization.yaml
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add deploy/overlays/prod/kustomization.yaml
-          git commit -m "chore: update prod image tag to ${{ github.sha }}"
+          git commit -m "chore: update prod api image tag to ${{ github.sha }}"
           git pull --rebase origin main
           git push
 
