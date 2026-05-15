@@ -4,106 +4,134 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/Amertz08/gitops-example/internal/activities"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/suite"
+
+	"github.com/Amertz08/gitops-example/internal/activities"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 )
 
-type IAMWorkflowTestSuite struct {
-	suite.Suite
-	testsuite.WorkflowTestSuite
-	env *testsuite.TestWorkflowEnvironment
+func TestIAMWorkflows(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "IAM Workflows Suite")
 }
 
-func (s *IAMWorkflowTestSuite) SetupTest() {
-	s.env = s.NewTestWorkflowEnvironment()
-}
+var _ = Describe("SpinUpIAMWorkflow", func() {
+	var (
+		testSuite testsuite.WorkflowTestSuite
+		env       *testsuite.TestWorkflowEnvironment
+	)
 
-func (s *IAMWorkflowTestSuite) AfterTest(_, _ string) {
-	s.env.AssertExpectations(s.T())
-}
-
-func TestIAMWorkflowSuite(t *testing.T) {
-	suite.Run(t, new(IAMWorkflowTestSuite))
-}
-
-func (s *IAMWorkflowTestSuite) Test_SpinUpIAM_InvalidInput() {
-	s.env.ExecuteWorkflow(SpinUpIAMWorkflow, SpinUpEKSIAMInput{})
-
-	s.True(s.env.IsWorkflowCompleted())
-	err := s.env.GetWorkflowError()
-	s.Error(err)
-	var appErr *temporal.ApplicationError
-	s.True(errors.As(err, &appErr))
-	s.Equal("InvalidInput", appErr.Type())
-}
-
-func (s *IAMWorkflowTestSuite) Test_SpinUpIAM_Success() {
-	aws := &activities.AWSActivities{}
-	s.env.OnActivity(aws.CreateIAMRole, mock.Anything, mock.Anything).
-		Return("arn:aws:iam::123:role/cluster-role", nil).Once()
-	s.env.OnActivity(aws.CreateIAMRole, mock.Anything, mock.Anything).
-		Return("arn:aws:iam::123:role/node-role", nil).Once()
-
-	s.env.ExecuteWorkflow(SpinUpIAMWorkflow, SpinUpEKSIAMInput{
-		ClusterName: "my-cluster",
-		Environment: "prod",
-		Team:        "platform",
+	BeforeEach(func() {
+		env = testSuite.NewTestWorkflowEnvironment()
 	})
 
-	s.True(s.env.IsWorkflowCompleted())
-	s.NoError(s.env.GetWorkflowError())
-
-	var out SpinUpEKSIAMOutput
-	s.NoError(s.env.GetWorkflowResult(&out))
-	s.Equal("arn:aws:iam::123:role/cluster-role", out.ClusterRoleARN)
-	s.Equal("my-cluster-eks-cluster-role", out.ClusterRoleName)
-	s.Equal("arn:aws:iam::123:role/node-role", out.NodeRoleARN)
-	s.Equal("my-cluster-eks-node-role", out.NodeRoleName)
-}
-
-// When node role creation fails, the saga must compensate the already-created cluster role.
-func (s *IAMWorkflowTestSuite) Test_SpinUpIAM_NodeRoleFailure_CompensatesClusterRole() {
-	aws := &activities.AWSActivities{}
-	s.env.OnActivity(aws.CreateIAMRole, mock.Anything, mock.Anything).
-		Return("arn:aws:iam::123:role/cluster-role", nil).Once()
-	s.env.OnActivity(aws.CreateIAMRole, mock.Anything, mock.Anything).
-		Return("", errors.New("IAM quota exceeded"))
-	s.env.OnActivity(aws.DeleteIAMRole, mock.Anything, mock.Anything).
-		Return(nil).Once()
-
-	s.env.ExecuteWorkflow(SpinUpIAMWorkflow, SpinUpEKSIAMInput{
-		ClusterName: "my-cluster",
-		Environment: "prod",
-		Team:        "platform",
+	AfterEach(func() {
+		env.AssertExpectations(GinkgoT())
 	})
 
-	s.True(s.env.IsWorkflowCompleted())
-	s.Error(s.env.GetWorkflowError())
-}
+	Context("with invalid input", func() {
+		It("returns a non-retryable InvalidInput error", func() {
+			env.ExecuteWorkflow(SpinUpIAMWorkflow, SpinUpEKSIAMInput{})
 
-func (s *IAMWorkflowTestSuite) Test_SpinDownIAM_InvalidInput() {
-	s.env.ExecuteWorkflow(SpinDownIAMWorkflow, SpinDownEKSIAMInput{})
-
-	s.True(s.env.IsWorkflowCompleted())
-	err := s.env.GetWorkflowError()
-	s.Error(err)
-	var appErr *temporal.ApplicationError
-	s.True(errors.As(err, &appErr))
-	s.Equal("InvalidInput", appErr.Type())
-}
-
-func (s *IAMWorkflowTestSuite) Test_SpinDownIAM_Success() {
-	aws := &activities.AWSActivities{}
-	s.env.OnActivity(aws.DeleteIAMRole, mock.Anything, mock.Anything).Return(nil).Times(2)
-
-	s.env.ExecuteWorkflow(SpinDownIAMWorkflow, SpinDownEKSIAMInput{
-		ClusterRoleName: "my-cluster-eks-cluster-role",
-		NodeRoleName:    "my-cluster-eks-node-role",
+			Expect(env.IsWorkflowCompleted()).To(BeTrue())
+			err := env.GetWorkflowError()
+			Expect(err).To(HaveOccurred())
+			var appErr *temporal.ApplicationError
+			Expect(errors.As(err, &appErr)).To(BeTrue())
+			Expect(appErr.Type()).To(Equal("InvalidInput"))
+		})
 	})
 
-	s.True(s.env.IsWorkflowCompleted())
-	s.NoError(s.env.GetWorkflowError())
-}
+	Context("with valid input", func() {
+		It("creates both IAM roles and returns their ARNs and names", func() {
+			aws := &activities.AWSActivities{}
+			env.OnActivity(aws.CreateIAMRole, mock.Anything, mock.Anything).
+				Return("arn:aws:iam::123:role/cluster-role", nil).Once()
+			env.OnActivity(aws.CreateIAMRole, mock.Anything, mock.Anything).
+				Return("arn:aws:iam::123:role/node-role", nil).Once()
+
+			env.ExecuteWorkflow(SpinUpIAMWorkflow, SpinUpEKSIAMInput{
+				ClusterName: "my-cluster",
+				Environment: "prod",
+				Team:        "platform",
+			})
+
+			Expect(env.IsWorkflowCompleted()).To(BeTrue())
+			Expect(env.GetWorkflowError()).NotTo(HaveOccurred())
+
+			var out SpinUpEKSIAMOutput
+			Expect(env.GetWorkflowResult(&out)).NotTo(HaveOccurred())
+			Expect(out.ClusterRoleARN).To(Equal("arn:aws:iam::123:role/cluster-role"))
+			Expect(out.ClusterRoleName).To(Equal("my-cluster-eks-cluster-role"))
+			Expect(out.NodeRoleARN).To(Equal("arn:aws:iam::123:role/node-role"))
+			Expect(out.NodeRoleName).To(Equal("my-cluster-eks-node-role"))
+		})
+	})
+
+	Context("when node role creation fails", func() {
+		It("compensates by deleting the cluster role", func() {
+			aws := &activities.AWSActivities{}
+			env.OnActivity(aws.CreateIAMRole, mock.Anything, mock.Anything).
+				Return("arn:aws:iam::123:role/cluster-role", nil).Once()
+			env.OnActivity(aws.CreateIAMRole, mock.Anything, mock.Anything).
+				Return("", errors.New("IAM quota exceeded"))
+			env.OnActivity(aws.DeleteIAMRole, mock.Anything, mock.Anything).
+				Return(nil).Once()
+
+			env.ExecuteWorkflow(SpinUpIAMWorkflow, SpinUpEKSIAMInput{
+				ClusterName: "my-cluster",
+				Environment: "prod",
+				Team:        "platform",
+			})
+
+			Expect(env.IsWorkflowCompleted()).To(BeTrue())
+			Expect(env.GetWorkflowError()).To(HaveOccurred())
+		})
+	})
+})
+
+var _ = Describe("SpinDownIAMWorkflow", func() {
+	var (
+		testSuite testsuite.WorkflowTestSuite
+		env       *testsuite.TestWorkflowEnvironment
+	)
+
+	BeforeEach(func() {
+		env = testSuite.NewTestWorkflowEnvironment()
+	})
+
+	AfterEach(func() {
+		env.AssertExpectations(GinkgoT())
+	})
+
+	Context("with invalid input", func() {
+		It("returns a non-retryable InvalidInput error", func() {
+			env.ExecuteWorkflow(SpinDownIAMWorkflow, SpinDownEKSIAMInput{})
+
+			Expect(env.IsWorkflowCompleted()).To(BeTrue())
+			err := env.GetWorkflowError()
+			Expect(err).To(HaveOccurred())
+			var appErr *temporal.ApplicationError
+			Expect(errors.As(err, &appErr)).To(BeTrue())
+			Expect(appErr.Type()).To(Equal("InvalidInput"))
+		})
+	})
+
+	Context("with valid input", func() {
+		It("deletes both IAM roles", func() {
+			aws := &activities.AWSActivities{}
+			env.OnActivity(aws.DeleteIAMRole, mock.Anything, mock.Anything).Return(nil).Times(2)
+
+			env.ExecuteWorkflow(SpinDownIAMWorkflow, SpinDownEKSIAMInput{
+				ClusterRoleName: "my-cluster-eks-cluster-role",
+				NodeRoleName:    "my-cluster-eks-node-role",
+			})
+
+			Expect(env.IsWorkflowCompleted()).To(BeTrue())
+			Expect(env.GetWorkflowError()).NotTo(HaveOccurred())
+		})
+	})
+})
