@@ -2,32 +2,15 @@ package workflows
 
 import (
 	"errors"
-	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/Amertz08/gitops-example/internal/activities"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 )
-
-type EKSWorkflowTestSuite struct {
-	suite.Suite
-	testsuite.WorkflowTestSuite
-	env *testsuite.TestWorkflowEnvironment
-}
-
-func (s *EKSWorkflowTestSuite) SetupTest() {
-	s.env = s.NewTestWorkflowEnvironment()
-}
-
-func (s *EKSWorkflowTestSuite) AfterTest(_, _ string) {
-	s.env.AssertExpectations(s.T())
-}
-
-func TestEKSWorkflowSuite(t *testing.T) {
-	suite.Run(t, new(EKSWorkflowTestSuite))
-}
 
 func validEKSInput() SpinUpEKSInput {
 	return SpinUpEKSInput{
@@ -44,63 +27,102 @@ func validEKSInput() SpinUpEKSInput {
 	}
 }
 
-func (s *EKSWorkflowTestSuite) Test_SpinUpEKS_InvalidInput() {
-	s.env.ExecuteWorkflow(SpinUpEKSWorkflow, SpinUpEKSInput{})
+var _ = Describe("SpinUpEKSWorkflow", func() {
+	var (
+		testSuite testsuite.WorkflowTestSuite
+		env       *testsuite.TestWorkflowEnvironment
+	)
 
-	s.True(s.env.IsWorkflowCompleted())
-	err := s.env.GetWorkflowError()
-	s.Error(err)
-	var appErr *temporal.ApplicationError
-	s.True(errors.As(err, &appErr))
-	s.Equal("InvalidInput", appErr.Type())
-}
-
-func (s *EKSWorkflowTestSuite) Test_SpinUpEKS_Success() {
-	aws := &activities.AWSActivities{}
-	s.env.OnActivity(aws.CreateEKSCluster, mock.Anything, mock.Anything).Return(nil)
-	s.env.OnActivity(aws.CreateNodeGroup, mock.Anything, mock.Anything).Return(nil)
-
-	s.env.ExecuteWorkflow(SpinUpEKSWorkflow, validEKSInput())
-
-	s.True(s.env.IsWorkflowCompleted())
-	s.NoError(s.env.GetWorkflowError())
-}
-
-// CreateNodeGroup failing must trigger saga compensation to delete the cluster.
-func (s *EKSWorkflowTestSuite) Test_SpinUpEKS_NodeGroupFailure_CompensatesCluster() {
-	aws := &activities.AWSActivities{}
-	s.env.OnActivity(aws.CreateEKSCluster, mock.Anything, mock.Anything).Return(nil)
-	s.env.OnActivity(aws.CreateNodeGroup, mock.Anything, mock.Anything).
-		Return(errors.New("node group quota exceeded"))
-	s.env.OnActivity(aws.DeleteEKSCluster, mock.Anything, mock.Anything).Return(nil).Once()
-
-	s.env.ExecuteWorkflow(SpinUpEKSWorkflow, validEKSInput())
-
-	s.True(s.env.IsWorkflowCompleted())
-	s.Error(s.env.GetWorkflowError())
-}
-
-func (s *EKSWorkflowTestSuite) Test_SpinDownEKS_InvalidInput() {
-	s.env.ExecuteWorkflow(SpinDownEKSWorkflow, SpinDownEKSInput{})
-
-	s.True(s.env.IsWorkflowCompleted())
-	err := s.env.GetWorkflowError()
-	s.Error(err)
-	var appErr *temporal.ApplicationError
-	s.True(errors.As(err, &appErr))
-	s.Equal("InvalidInput", appErr.Type())
-}
-
-func (s *EKSWorkflowTestSuite) Test_SpinDownEKS_Success() {
-	aws := &activities.AWSActivities{}
-	s.env.OnActivity(aws.DeleteNodeGroup, mock.Anything, mock.Anything).Return(nil)
-	s.env.OnActivity(aws.DeleteEKSCluster, mock.Anything, mock.Anything).Return(nil)
-
-	s.env.ExecuteWorkflow(SpinDownEKSWorkflow, SpinDownEKSInput{
-		Region:      "us-east-1",
-		ClusterName: "my-cluster",
+	BeforeEach(func() {
+		env = testSuite.NewTestWorkflowEnvironment()
 	})
 
-	s.True(s.env.IsWorkflowCompleted())
-	s.NoError(s.env.GetWorkflowError())
-}
+	AfterEach(func() {
+		env.AssertExpectations(GinkgoT())
+	})
+
+	Context("with invalid input", func() {
+		It("returns a non-retryable InvalidInput error", func() {
+			env.ExecuteWorkflow(SpinUpEKSWorkflow, SpinUpEKSInput{})
+
+			Expect(env.IsWorkflowCompleted()).To(BeTrue())
+			err := env.GetWorkflowError()
+			Expect(err).To(HaveOccurred())
+			var appErr *temporal.ApplicationError
+			Expect(errors.As(err, &appErr)).To(BeTrue())
+			Expect(appErr.Type()).To(Equal("InvalidInput"))
+		})
+	})
+
+	Context("with valid input", func() {
+		It("creates the EKS cluster and node group", func() {
+			aws := &activities.AWSActivities{}
+			env.OnActivity(aws.CreateEKSCluster, mock.Anything, mock.Anything).Return(nil)
+			env.OnActivity(aws.CreateNodeGroup, mock.Anything, mock.Anything).Return(nil)
+
+			env.ExecuteWorkflow(SpinUpEKSWorkflow, validEKSInput())
+
+			Expect(env.IsWorkflowCompleted()).To(BeTrue())
+			Expect(env.GetWorkflowError()).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("when CreateNodeGroup fails", func() {
+		It("compensates by deleting the EKS cluster", func() {
+			aws := &activities.AWSActivities{}
+			env.OnActivity(aws.CreateEKSCluster, mock.Anything, mock.Anything).Return(nil)
+			env.OnActivity(aws.CreateNodeGroup, mock.Anything, mock.Anything).
+				Return(errors.New("node group quota exceeded"))
+			env.OnActivity(aws.DeleteEKSCluster, mock.Anything, mock.Anything).Return(nil).Once()
+
+			env.ExecuteWorkflow(SpinUpEKSWorkflow, validEKSInput())
+
+			Expect(env.IsWorkflowCompleted()).To(BeTrue())
+			Expect(env.GetWorkflowError()).To(HaveOccurred())
+		})
+	})
+})
+
+var _ = Describe("SpinDownEKSWorkflow", func() {
+	var (
+		testSuite testsuite.WorkflowTestSuite
+		env       *testsuite.TestWorkflowEnvironment
+	)
+
+	BeforeEach(func() {
+		env = testSuite.NewTestWorkflowEnvironment()
+	})
+
+	AfterEach(func() {
+		env.AssertExpectations(GinkgoT())
+	})
+
+	Context("with invalid input", func() {
+		It("returns a non-retryable InvalidInput error", func() {
+			env.ExecuteWorkflow(SpinDownEKSWorkflow, SpinDownEKSInput{})
+
+			Expect(env.IsWorkflowCompleted()).To(BeTrue())
+			err := env.GetWorkflowError()
+			Expect(err).To(HaveOccurred())
+			var appErr *temporal.ApplicationError
+			Expect(errors.As(err, &appErr)).To(BeTrue())
+			Expect(appErr.Type()).To(Equal("InvalidInput"))
+		})
+	})
+
+	Context("with valid input", func() {
+		It("deletes the node group then the EKS cluster", func() {
+			aws := &activities.AWSActivities{}
+			env.OnActivity(aws.DeleteNodeGroup, mock.Anything, mock.Anything).Return(nil)
+			env.OnActivity(aws.DeleteEKSCluster, mock.Anything, mock.Anything).Return(nil)
+
+			env.ExecuteWorkflow(SpinDownEKSWorkflow, SpinDownEKSInput{
+				Region:      "us-east-1",
+				ClusterName: "my-cluster",
+			})
+
+			Expect(env.IsWorkflowCompleted()).To(BeTrue())
+			Expect(env.GetWorkflowError()).NotTo(HaveOccurred())
+		})
+	})
+})
