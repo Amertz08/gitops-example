@@ -47,13 +47,23 @@ go build -o api ./cmd/api/
 # Build the worker binary
 go build -o worker ./cmd/worker/
 
-# Run tests
+# Run all tests
 go test -v ./...
+
+# Run workflow tests only
+go test -v ./internal/workflows/...
+
+# Focus on a specific spec (Ginkgo)
+ginkgo -v --focus "SpinUpIAMWorkflow" ./internal/workflows/
 
 # Build Docker images
 docker build -t gitops-example .
 docker build --target worker-release-stage -t gitops-example-worker .
 ```
+
+## Testing
+
+Workflow tests are in `internal/workflows/` and use [Ginkgo v2](https://onsi.github.io/ginkgo/) + [Gomega](https://onsi.github.io/gomega/). The Temporal `testsuite` package mocks all AWS activity calls, so no real credentials or running Temporal server are required.
 
 ## CI/CD
 
