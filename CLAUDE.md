@@ -22,15 +22,25 @@ go run ./cmd/api/main.go
 go build -o api ./cmd/api/
 go build -o worker ./cmd/worker/
 
-# Run tests
+# Run all tests
 go test -v ./...
 
-# Run a single test
-go test -v -run TestName ./cmd/
+# Run workflow tests only
+go test -v ./internal/workflows/...
+
+# Focus on a specific Ginkgo Describe or It block
+go test -v ./internal/workflows/... -run TestWorkflows -- --focus "SpinUpIAMWorkflow"
+
+# Or use the ginkgo CLI directly
+ginkgo -v --focus "SpinUpIAMWorkflow" ./internal/workflows/
 
 # Build Docker image
 docker build -t gitops-example .
 ```
+
+## Testing
+
+Workflow tests live in `internal/workflows/*_test.go` and use [Ginkgo v2](https://onsi.github.io/ginkgo/) with [Gomega](https://onsi.github.io/gomega/) matchers. All specs run under a single `TestWorkflows` entry point in `suite_test.go`. Activity calls are mocked via `go.temporal.io/sdk/testsuite` — no real AWS credentials or Temporal server needed.
 
 ## Architecture
 
