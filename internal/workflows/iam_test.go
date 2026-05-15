@@ -2,7 +2,6 @@ package workflows
 
 import (
 	"errors"
-	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -12,11 +11,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 )
-
-func TestIAMWorkflows(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "IAM Workflows Suite")
-}
 
 var _ = Describe("SpinUpIAMWorkflow", func() {
 	var (
