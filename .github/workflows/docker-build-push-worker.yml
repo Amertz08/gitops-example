@@ -13,7 +13,21 @@ permissions:
   contents: write
 
 jobs:
+  workflowcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install workflowcheck
+        run: go install go.temporal.io/sdk/contrib/tools/workflowcheck@latest
+      - name: Check workflow determinism
+        run: workflowcheck ./...
+
   build-and-push:
+    needs: workflowcheck
     uses: ./.github/workflows/reusable-docker-build-push.yml
     with:
       image_suffix: "-worker"
