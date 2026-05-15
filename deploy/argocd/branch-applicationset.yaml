@@ -1,18 +1,42 @@
 apiVersion: argoproj.io/v1alpha1
-kind: Application
+kind: ApplicationSet
 metadata:
-  name: gitops-example-branches
+  name: gitops-example-branch-previews
   namespace: argocd
 spec:
-  project: default
-  source:
-    repoURL: https://github.com/Amertz08/gitops-example
-    targetRevision: main
-    path: deploy/argocd/branches
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: argocd
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
+  generators:
+    - pullRequest:
+        github:
+          owner: Amertz08
+          repo: gitops-example
+          tokenRef:
+            secretName: github-token
+            key: token
+        requeueAfterSeconds: 60
+  template:
+    metadata:
+      name: "gitops-example-pr-{{number}}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/Amertz08/gitops-example
+        targetRevision: "{{branch}}"
+        path: deploy/base
+        kustomize:
+          images:
+            - "amertz08/gitops-example:{{branch_slug}}-latest"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "gitops-example-pr-{{number}}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m

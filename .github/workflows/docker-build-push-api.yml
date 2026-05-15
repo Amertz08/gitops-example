@@ -7,35 +7,22 @@ on:
     paths:
       - cmd/api/main.go
       - .github/workflows/docker-build-push-api.yml
-  delete:
 
 permissions:
   contents: write
 
 jobs:
   build-and-push:
-    if: github.event_name == 'push'
     uses: ./.github/workflows/reusable-docker-build-push.yml
     with:
       image_description: GitOps Example API
     secrets: inherit
 
   update-prod-tag:
-    if: github.event_name == 'push' && github.ref_name == 'main'
+    if: github.ref_name == 'main'
     needs: build-and-push
     uses: ./.github/workflows/reusable-update-prod-tag.yml
     with:
       image_name_pattern: amertz08\/gitops-example$
       commit_message_label: api
-    secrets: inherit
-
-  register-branch:
-    if: github.event_name == 'push' && github.ref_name != 'main'
-    needs: build-and-push
-    uses: ./.github/workflows/reusable-argocd-register.yml
-    secrets: inherit
-
-  cleanup-branch:
-    if: github.event_name == 'delete' && github.event.ref_type == 'branch'
-    uses: ./.github/workflows/reusable-argocd-cleanup.yml
     secrets: inherit
